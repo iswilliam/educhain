@@ -25,7 +25,7 @@
     }
   ],
   "env": {
-    "MONGODB_URI": "@mongodb-uri",
+    "MONGODB_URI": "mongodb+srv://nounproject1:nounproject1@cluster0.qp5qs66.mongodb.net/educhain?retryWrites=true&w=majority&appName=Cluster0",
     "NODE_ENV": "production"
   }
 }
