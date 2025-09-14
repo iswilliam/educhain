@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "builds": [
+  "functions": [
     {
       "src": "api/index.js",
       "use": "@vercel/node"
@@ -28,7 +28,7 @@
     "MONGODB_URI": "@mongodb-uri",
     "NODE_ENV": "production"
   },
-  "functions": {
+  "builds": {
     "api/index.js": {
       "maxDuration": 30
     }
