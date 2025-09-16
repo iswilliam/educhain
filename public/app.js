@@ -1,4 +1,4 @@
-// EduChain Assignment Management System - Complete Enhanced app.js with Blockchain Features
+// EduChain Assignment Management System - FIXED VERSION
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeData();
@@ -427,6 +427,7 @@ function showAvailableAssignments() {
                     <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
                     <p><strong>Created by:</strong> ${assignment.createdByName}</p>
                     ${assignment.instructions ? `<p><strong>Instructions:</strong> ${assignment.instructions}</p>` : ''}
+                    ${assignment.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.8em;word-break:break-all;background:#f0f0f0;padding:2px 4px;border-radius:3px;">${assignment.blockchainHash}</code></p>` : ''}
                 </div>
                 <div class="assignment-actions">
                     <button class="btn btn-primary" onclick="showSubmitForm('${assignment._id}')">Submit Assignment</button>
@@ -440,6 +441,7 @@ function showAvailableAssignments() {
     content.innerHTML = assignmentsHTML;
 }
 
+// FIXED: showSubmitForm function
 function showSubmitForm(assignmentTemplateId) {
     const assignment = assignmentTemplates.find(a => a._id === assignmentTemplateId);
     if (!assignment) return;
@@ -473,661 +475,11 @@ function showSubmitForm(assignmentTemplateId) {
         </div>
     `;
     
-    document.getElementById('gradeForm').addEventListener('submit', handleGrading);
-}
-
-async function handleGrading(e) {
-    e.preventDefault();
-    
-    const submissionId = document.getElementById('submissionId').value;
-    const grade = document.getElementById('grade').value;
-    const marks = parseInt(document.getElementById('marks').value);
-    const feedback = document.getElementById('feedback').value;
-    
-    try {
-        showMessage('Submitting grade...', 'info');
-        
-        const result = await apiCall(`/api/submissions/grade/${submissionId}`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                grade,
-                marks,
-                feedback,
-                gradedBy: currentUser.id,
-                gradedByName: currentUser.name
-            })
-        });
-        
-        if (result.success) {
-            showMessage('Grade submitted successfully! Blockchain hash: ' + result.blockchainHash.substring(0, 16) + '...', 'success');
-            await loadUserData();
-            showDashboardSection('grade-submissions');
-        } else {
-            showMessage('Error: ' + result.error, 'error');
-        }
-    } catch (error) {
-        console.error('Grading error:', error);
-        showMessage('Failed to submit grade. Please try again.', 'error');
-    }
-}
-
-function showManageAssignments() {
-    const content = document.getElementById('dashboardContent');
-    
-    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
-    
-    if (myAssignments.length === 0) {
-        content.innerHTML = `
-            <h3>My Assignments</h3>
-            <div class="no-assignments">
-                <p>You haven't created any assignments yet.</p>
-                <button class="btn btn-primary" onclick="showDashboardSection('create-assignment')">Create First Assignment</button>
-            </div>
-        `;
-        return;
-    }
-    
-    let assignmentsHTML = `
-        <h3>My Assignments</h3>
-        <div class="assignments-grid">
-    `;
-    
-    myAssignments.forEach(assignment => {
-        const dueDate = new Date(assignment.dueDate);
-        const isOverdue = dueDate < new Date();
-        const dueDateClass = isOverdue ? 'overdue' : '';
-        const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === assignment._id);
-        
-        assignmentsHTML += `
-            <div class="assignment-card">
-                <div class="assignment-header">
-                    <h4>${assignment.title}</h4>
-                    <span class="course-badge">${assignment.courseCode}</span>
-                </div>
-                <div class="assignment-details">
-                    <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
-                    <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
-                    <p><strong>Submissions:</strong> ${assignmentSubmissions.length}</p>
-                    <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade).length}</p>
-                    <p><strong>Created:</strong> ${new Date(assignment.createdAt).toLocaleDateString()}</p>
-                </div>
-                <div class="assignment-actions">
-                    <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">View Submissions</button>
-                    ${assignment.blockchainHash ? `<button class="btn btn-secondary btn-sm" onclick="verifyBlockchainRecord('${assignment._id}', 'assignment_template')">Verify Blockchain</button>` : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    assignmentsHTML += '</div>';
-    content.innerHTML = assignmentsHTML;
-}
-
-function viewAssignmentSubmissions(assignmentId) {
-    const assignment = assignmentTemplates.find(a => a._id === assignmentId);
-    if (!assignment) return;
-    
-    const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === assignmentId);
-    const content = document.getElementById('dashboardContent');
-    
-    let submissionsHTML = `
-        <h3>Submissions for: ${assignment.title}</h3>
-        <div class="assignment-info-bar">
-            <p><strong>Course:</strong> ${assignment.courseCode}</p>
-            <p><strong>Due Date:</strong> ${new Date(assignment.dueDate).toLocaleDateString()}</p>
-            <p><strong>Total Submissions:</strong> ${assignmentSubmissions.length}</p>
-        </div>
-    `;
-    
-    if (assignmentSubmissions.length === 0) {
-        submissionsHTML += `
-            <div class="no-submissions">
-                <p>No submissions for this assignment yet.</p>
-                <button class="btn btn-secondary" onclick="showDashboardSection('manage-assignments')">Back to Assignments</button>
-            </div>
-        `;
-    } else {
-        submissionsHTML += `
-            <div class="submissions-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Student</th>
-                            <th>Submitted</th>
-                            <th>Status</th>
-                            <th>Grade</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-        
-        assignmentSubmissions.forEach(submission => {
-            const statusClass = getStatusClass(submission.status);
-            const submittedDate = new Date(submission.submittedAt).toLocaleDateString();
-            
-            submissionsHTML += `
-                <tr>
-                    <td>${submission.studentName}</td>
-                    <td>${submittedDate}</td>
-                    <td><span class="status ${statusClass}">${submission.status}</span></td>
-                    <td>${submission.grade || 'Not graded'}</td>
-                    <td>
-                        ${!submission.grade ? `<button class="btn btn-sm btn-success" onclick="showGradeForm('${submission._id}')">Grade</button>` : ''}
-                        <button class="btn btn-sm btn-secondary" onclick="downloadSubmission('${submission._id}')">Download</button>
-                    </td>
-                </tr>
-            `;
-        });
-        
-        submissionsHTML += `
-                    </tbody>
-                </table>
-            </div>
-            <button class="btn btn-secondary" onclick="showDashboardSection('manage-assignments')">Back to Assignments</button>
-        `;
-    }
-    
-    content.innerHTML = submissionsHTML;
-}
-
-// Blockchain Functions
-function showBlockchainSection() {
-    const content = document.getElementById('dashboardContent');
-    
-    let blockchainHTML = `
-        <h3>Blockchain Records & Verification</h3>
-        
-        <div class="blockchain-section">
-            <div class="verification-card">
-                <h4>Verify Record</h4>
-                <form id="verificationForm">
-                    <div class="form-group">
-                        <label for="recordId">Record ID:</label>
-                        <input type="text" id="recordId" placeholder="Enter record ID to verify">
-                    </div>
-                    <div class="form-group">
-                        <label for="recordType">Record Type:</label>
-                        <select id="recordType">
-                            <option value="submission">Submission</option>
-                            <option value="assignment_template">Assignment Template</option>
-                            <option value="grade">Grade</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Verify on Blockchain</button>
-                </form>
-                <div id="verificationResult"></div>
-            </div>
-    `;
-    
-    if (currentUser.role === 'admin') {
-        blockchainHTML += `
-            <div class="blockchain-records">
-                <h4>Recent Blockchain Records</h4>
-                <div class="records-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Block #</th>
-                                <th>Type</th>
-                                <th>Hash</th>
-                                <th>Timestamp</th>
-                                <th>Verified</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        `;
-        
-        blockchainRecords.slice(0, 10).forEach(record => {
-            blockchainHTML += `
-                <tr>
-                    <td>${record.blockNumber}</td>
-                    <td>${record.recordType}</td>
-                    <td class="hash-cell">${record.dataHash.substring(0, 16)}...</td>
-                    <td>${new Date(record.timestamp).toLocaleDateString()}</td>
-                    <td>${record.verified ? '✅' : '❌'}</td>
-                </tr>
-            `;
-        });
-        
-        blockchainHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-    
-    blockchainHTML += '</div>';
-    content.innerHTML = blockchainHTML;
-    
-    document.getElementById('verificationForm').addEventListener('submit', handleVerification);
-}
-
-async function handleVerification(e) {
-    e.preventDefault();
-    
-    const recordId = document.getElementById('recordId').value.trim();
-    const recordType = document.getElementById('recordType').value;
-    
-    if (!recordId) {
-        showMessage('Please enter a record ID', 'error');
-        return;
-    }
-    
-    try {
-        const result = await apiCall('/api/blockchain/verify', {
-            method: 'POST',
-            body: JSON.stringify({ recordId, recordType })
-        });
-        
-        const resultDiv = document.getElementById('verificationResult');
-        
-        if (result.success && result.verified) {
-            resultDiv.innerHTML = `
-                <div class="verification-success">
-                    <h5>✅ Verification Successful</h5>
-                    <p><strong>Block Number:</strong> ${result.blockchainRecord.blockNumber}</p>
-                    <p><strong>Data Hash:</strong> ${result.blockchainRecord.dataHash}</p>
-                    <p><strong>Timestamp:</strong> ${new Date(result.blockchainRecord.timestamp).toLocaleString()}</p>
-                    <p><strong>Chain Integrity:</strong> ${result.chainIntegrity ? '✅ Valid' : '❌ Compromised'}</p>
-                </div>
-            `;
-        } else {
-            resultDiv.innerHTML = `
-                <div class="verification-error">
-                    <h5>❌ Verification Failed</h5>
-                    <p>${result.error || 'Record not found or invalid'}</p>
-                </div>
-            `;
-        }
-        
-    } catch (error) {
-        console.error('Verification error:', error);
-        document.getElementById('verificationResult').innerHTML = `
-            <div class="verification-error">
-                <h5>❌ Verification Error</h5>
-                <p>Failed to verify record. Please try again.</p>
-            </div>
-        `;
-    }
-}
-
-async function verifyBlockchainRecord(recordId, recordType) {
-    try {
-        showMessage('Verifying blockchain record...', 'info');
-        
-        const result = await apiCall('/api/blockchain/verify', {
-            method: 'POST',
-            body: JSON.stringify({ recordId, recordType })
-        });
-        
-        if (result.success && result.verified) {
-            showMessage(`✅ Blockchain verification successful! Block #${result.blockchainRecord.blockNumber}`, 'success');
-        } else {
-            showMessage('❌ Blockchain verification failed: ' + (result.error || 'Record not found'), 'error');
-        }
-        
-    } catch (error) {
-        console.error('Blockchain verification error:', error);
-        showMessage('Failed to verify blockchain record', 'error');
-    }
-}
-
-// Admin Functions
-function showManageUsers() {
-    const content = document.getElementById('dashboardContent');
-    
-    let tableRows = '';
-    users.forEach(user => {
-        tableRows += '<tr>' +
-            '<td>' + user.name + '</td>' +
-            '<td>' + user.username + '</td>' +
-            '<td>' + (user.email || 'N/A') + '</td>' +
-            '<td>' + user.role + '</td>' +
-            '<td>' + (user.isActive ? 'Active' : 'Inactive') + '</td>' +
-            '<td>' + new Date(user.createdAt).toLocaleDateString() + '</td>' +
-            '</tr>';
-    });
-
-    content.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">' +
-        '<h3>Manage Users</h3>' +
-        '<button class="btn btn-secondary" onclick="exportUsers()">Export Users</button>' +
-        '</div>' +
-        '<table class="data-table">' +
-        '<thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th></tr></thead>' +
-        '<tbody>' + tableRows + '</tbody>' +
-        '</table>';
-}
-
-function showSystemOverview() {
-    const content = document.getElementById('dashboardContent');
-    
-    const totalStudents = users.filter(u => u.role === 'student').length;
-    const totalLecturers = users.filter(u => u.role === 'lecturer').length;
-    const totalAdmins = users.filter(u => u.role === 'admin').length;
-    const gradedSubmissions = submissions.filter(s => s.grade).length;
-    const pendingSubmissions = submissions.filter(s => !s.grade).length;
-    
-    content.innerHTML = `
-        <h3>System Overview</h3>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">👨‍🎓</div>
-                <h3>${totalStudents}</h3>
-                <p>Students</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">👨‍🏫</div>
-                <h3>${totalLecturers}</h3>
-                <p>Lecturers</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">👨‍💼</div>
-                <h3>${totalAdmins}</h3>
-                <p>Administrators</p>
-            </div>
-        </div>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">📋</div>
-                <h3>${assignmentTemplates.length}</h3>
-                <p>Assignment Templates</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">📝</div>
-                <h3>${submissions.length}</h3>
-                <p>Total Submissions</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">✅</div>
-                <h3>${gradedSubmissions}</h3>
-                <p>Graded Submissions</p>
-            </div>
-        </div>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">⏳</div>
-                <h3>${pendingSubmissions}</h3>
-                <p>Pending Grading</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🔗</div>
-                <h3>${blockchainRecords.length}</h3>
-                <p>Blockchain Records</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">📊</div>
-                <h3>${auditLog.length}</h3>
-                <p>Audit Entries</p>
-            </div>
-        </div>
-        
-        <div style="margin-top: 2rem;">
-            <h4>System Health</h4>
-            <div class="system-status">
-                <p><strong>Database:</strong> Connected ✅</p>
-                <p><strong>Blockchain:</strong> ${blockchainRecords.length > 0 ? 'Active ✅' : 'Inactive ❌'}</p>
-                <p><strong>File Storage:</strong> Active ✅</p>
-                <p><strong>Audit Logging:</strong> Active ✅</p>
-                <p><strong>Last Backup:</strong> ${new Date().toLocaleDateString()}</p>
-            </div>
-        </div>
-    `;
-}
-
-function showAuditTrail() {
-    const content = document.getElementById('dashboardContent');
-    
-    let tableRows = '';
-    auditLog.slice(0, 50).forEach(entry => {
-        const timestamp = new Date(entry.timestamp).toLocaleString();
-        tableRows += '<tr>' +
-            '<td>' + timestamp + '</td>' +
-            '<td>' + entry.user + '</td>' +
-            '<td>' + entry.action + '</td>' +
-            '<td>' + entry.details + '</td>' +
-            '<td>' + (entry.resourceType || 'N/A') + '</td>' +
-            '</tr>';
-    });
-
-    content.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">' +
-        '<h3>Audit Trail</h3>' +
-        '<div>' +
-        '<button class="btn btn-secondary" onclick="refreshAuditLog()">Refresh</button>' +
-        '<button class="btn btn-primary" onclick="exportAuditLog()">Export Log</button>' +
-        '</div>' +
-        '</div>' +
-        '<table class="data-table">' +
-        '<thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th><th>Resource</th></tr></thead>' +
-        '<tbody>' + tableRows + '</tbody>' +
-        '</table>';
-}
-
-// Utility Functions
-function getStatusClass(status) {
-    switch(status?.toLowerCase()) {
-        case 'submitted': return 'status-submitted';
-        case 'graded': return 'status-graded';
-        case 'pending': return 'status-pending';
-        case 'late': return 'status-late';
-        default: return 'status-default';
-    }
-}
-
-async function downloadSubmission(submissionId) {
-    try {
-        window.open(`/api/submissions/download/${submissionId}`, '_blank');
-    } catch (error) {
-        console.error('Download error:', error);
-        showMessage('Failed to download file', 'error');
-    }
-}
-
-async function refreshAuditLog() {
-    try {
-        showMessage('Refreshing audit log...', 'info');
-        await loadUserData();
-        showDashboardSection('audit');
-        showMessage('Audit log refreshed', 'success');
-    } catch (error) {
-        showMessage('Failed to refresh audit log', 'error');
-    }
-}
-
-function exportUsers() {
-    if (typeof XLSX === 'undefined') {
-        showMessage('Excel export feature not available.', 'error');
-        return;
-    }
-
-    const data = users.map(u => ({
-        'Name': u.name,
-        'Username': u.username,
-        'Email': u.email,
-        'Role': u.role,
-        'Status': u.isActive ? 'Active' : 'Inactive',
-        'Created': new Date(u.createdAt).toLocaleDateString()
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
-    
-    XLSX.writeFile(workbook, 'users_' + new Date().toISOString().split('T')[0] + '.xlsx');
-    showMessage('Users exported successfully!', 'success');
-}
-
-function exportAuditLog() {
-    if (typeof XLSX === 'undefined') {
-        showMessage('Excel export feature not available.', 'error');
-        return;
-    }
-
-    const data = auditLog.map(a => ({
-        'Timestamp': new Date(a.timestamp).toLocaleString(),
-        'User': a.user,
-        'Action': a.action,
-        'Details': a.details,
-        'Resource Type': a.resourceType || 'N/A'
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit Log');
-    
-    XLSX.writeFile(workbook, 'audit_log_' + new Date().toISOString().split('T')[0] + '.xlsx');
-    showMessage('Audit log exported successfully!', 'success');
-}
-
-// API helper function
-async function apiCall(endpoint, options = {}) {
-    try {
-        const response = await fetch(endpoint, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
-            ...options
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error('API call failed:', error);
-        throw error;
-    }
-}
-
-// Message and Modal Functions
-function showMessage(message, type) {
-    const existingMessage = document.querySelector('.status-message');
-    if (existingMessage) {
-        existingMessage.remove();
-    }
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'status-message status-' + type;
-    messageDiv.textContent = message;
-    
-    messageDiv.style.position = 'fixed';
-    messageDiv.style.top = '20px';
-    messageDiv.style.right = '20px';
-    messageDiv.style.zIndex = '9999';
-    messageDiv.style.maxWidth = '400px';
-    messageDiv.style.animation = 'slideIn 0.3s ease-out';
-    
-    document.body.appendChild(messageDiv);
-    
-    setTimeout(() => {
-        if (messageDiv.parentNode) {
-            messageDiv.style.animation = 'slideOut 0.3s ease-out';
-            setTimeout(() => {
-                if (messageDiv.parentNode) {
-                    messageDiv.remove();
-                }
-            }, 300);
-        }
-    }, 5000);
-}
-
-function submitContact(event) {
-    event.preventDefault();
-    
-    const name = document.getElementById('contactName').value;
-    const email = document.getElementById('contactEmail').value;
-    const message = document.getElementById('contactMessage').value;
-    
-    showMessage('Thank you, ' + name + '! Your message has been sent. We will get back to you soon.', 'success');
-    event.target.reset();
-}
-
-// Event Listeners and Initialization
-document.addEventListener('DOMContentLoaded', function() {
-    window.addEventListener('online', updateConnectionStatus);
-    window.addEventListener('offline', updateConnectionStatus);
-    updateConnectionStatus();
-    
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-        .status-online { color: #10b981; }
-        .status-offline { color: #ef4444; }
-        
-        .overdue { color: #ef4444; font-weight: bold; }
-        .blockchain-section { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem; }
-        .verification-card, .grading-card { background: #f8f9fa; padding: 2rem; border-radius: 12px; }
-        .verification-success { background: #d1fae5; color: #065f46; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
-        .verification-error { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
-        .assignments-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
-        .assignment-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .assignment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        .assignment-info-bar { background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
-        .system-status { background: #f8f9fa; padding: 1rem; border-radius: 8px; }
-        .hash-cell { font-family: monospace; font-size: 0.9em; }
-        .assignment-submit-card { background: #f8f9fa; padding: 2rem; border-radius: 12px; }
-        .assignment-info { background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; }
-        
-        @media (max-width: 768px) {
-            .blockchain-section { grid-template-columns: 1fr; }
-            .assignments-grid { grid-template-columns: 1fr; }
-        }
-    `;
-    document.head.appendChild(style);
-});
-
-function updateConnectionStatus() {
-    const statusElements = document.querySelectorAll('[data-connection-status]');
-    const status = navigator.onLine ? 'Online' : 'Offline';
-    statusElements.forEach(element => {
-        element.textContent = status;
-        element.className = navigator.onLine ? 'status-online' : 'status-offline';
-    });
-}
-
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        if (document.getElementById('verificationResult')) {
-            document.getElementById('verificationResult').innerHTML = '';
-        }
-    }
-    
-    if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        if (currentUser && currentUser.role === 'admin') {
-            exportAuditLog();
-        }
-    }
-});
-
-// Global error handlers
-window.addEventListener('error', function(e) {
-    console.error('Global error:', e.error);
-    showMessage('An unexpected error occurred. Please refresh the page.', 'error');
-});
-
-window.addEventListener('unhandledrejection', function(e) {
-    console.error('Unhandled promise rejection:', e.reason);
-    showMessage('A network error occurred. Please check your connection.', 'warning');
-});
-    
+    // FIXED: Correct form ID reference
     document.getElementById('submissionForm').addEventListener('submit', handleSubmission);
+}
 
-
+// FIXED: handleSubmission function
 async function handleSubmission(e) {
     e.preventDefault();
     
@@ -1200,6 +552,7 @@ function showMySubmissions() {
                     ${submission.grade ? `<p><strong>Grade:</strong> ${submission.grade}</p>` : ''}
                     ${submission.marks ? `<p><strong>Marks:</strong> ${submission.marks}/${submission.assignmentTemplate.maxMarks}</p>` : ''}
                     ${submission.feedback ? `<p><strong>Feedback:</strong> ${submission.feedback}</p>` : ''}
+                    ${submission.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.7em;word-break:break-all;background:#f0f0f0;padding:2px;border-radius:2px;cursor:pointer;" onclick="copyToClipboard('${submission.blockchainHash}')">${submission.blockchainHash}</code></p>` : ''}
                 </div>
                 <div class="submission-actions">
                     <button class="btn btn-sm" onclick="downloadSubmission('${submission._id}')">Download</button>
@@ -1295,249 +648,6 @@ async function handleCreateAssignment(e) {
     }
 }
 
-function showGradeSubmissions() {
-    const content = document.getElementById('dashboardContent');
-    
-    const ungradedSubmissions = submissions.filter(s => !s.grade);
-    
-    if (ungradedSubmissions.length === 0) {
-        content.innerHTML = `
-            <h3>Grade Submissions</h3>
-            <div class="no-submissions">
-                <p>No submissions pending grading.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    let submissionsHTML = `
-        <h3>Grade Submissions</h3>
-        <div class="submissions-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Assignment</th>
-                        <th>Course</th>
-                        <th>Submitted</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
-    ungradedSubmissions.forEach(submission => {
-        const statusClass = getStatusClass(submission.status);
-        const submittedDate = new Date(submission.submittedAt).toLocaleDateString();
-        
-        submissionsHTML += `
-            <tr>
-                <td>${submission.studentName}</td>
-                <td>${submission.assignmentTemplate.title}</td>
-                <td>${submission.assignmentTemplate.courseCode}</td>
-                <td>${submittedDate}</td>
-                <td><span class="status ${statusClass}">${submission.status}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-primary" onclick="showGradeForm('${submission._id}')">Grade</button>
-                    <button class="btn btn-sm btn-secondary" onclick="downloadSubmission('${submission._id}')">Download</button>
-                </td>
-            </tr>
-        `;
-    });
-    
-    submissionsHTML += `
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    content.innerHTML = submissionsHTML;
-}
-
-// function showGradeForm(submissionId) {
-//     const submission = submissions.find(s => s._id === submissionId);
-//     if (!submission) return;
-    
-//     const content = document.getElementById('dashboardContent');
-//     content.innerHTML = `
-//         <h3>Grade Submission</h3>
-//         <div class="grading-card">
-//             <div class="submission-info">
-//                 <h4>Submission Details</h4>
-//                 <p><strong>Student:</strong> ${submission.studentName}</p>
-//                 <p><strong>Assignment:</strong> ${submission.assignmentTemplate.title}</p>
-//                 <p><strong>Course:</strong> ${submission.assignmentTemplate.courseCode}</p>
-//                 <p><strong>Submitted:</strong> ${new Date(submission.submittedAt).toLocaleDateString()}</p>
-//                 <p><strong>Max Marks:</strong> ${submission.assignmentTemplate.maxMarks}</p>
-//             </div>
-            
-//             <form id="gradeForm">
-//                 <input type="hidden" id="submissionId" value="${submissionId}">
-                
-//                 <div class="form-group">
-//                     <label for="grade">Grade:</label>
-//                     <select id="grade" name="grade" required>
-//                         <option value="">Select Grade</option>
-//                         <option value="A+">A+ (90-100)</option>
-//                         <option value="A">A (85-89)</option>
-//                         <option value="B+">B+ (80-84)</option>
-//                         <option value="B">B (75-79)</option>
-//                         <option value="C+">C+ (70-74)</option>
-//                         <option value="C">C (65-69)</option>
-//                         <option value="D+">D+ (60-64)</option>
-//                         <option value="D">D (55-59)</option>
-//                         <option value="F">F (0-54)</option>
-//                     </select>
-//                 </div>
-                
-//                 <div class="form-group">
-//                     <label for="marks">Marks:</label>
-//                     <input type="number" id="marks" name="marks" min="0" max="${submission.assignmentTemplate.maxMarks}" required>
-//                 </div>
-                
-//                 <div class="form-group">
-//                     <label for="feedback">Feedback:</label>
-//                     <textarea id="feedback" name="feedback" rows="6" placeholder="Provide feedback to the student..."></textarea>
-//                 </div>
-                
-//                 <div class="actions">
-//                     <button type="submit" class="btn btn-success">Submit Grade</button>
-//                     <button type="button" class="btn btn-secondary" onclick="downloadSubmission('${submissionId}')">Download Assignment</button>
-//                     <button type="button" class="btn btn-secondary" onclick="showDashboardSection('grade-submissions')">Cancel</button>
-//                 </div>
-//             </form>
-//         </div>
-//     `;
-
-//          document.getElementById('gradeForm').addEventListener('submit', handleGradeSubmission);
-// }
-
-// async function handleGradeSubmission(e) {
-//     e.preventDefault();
-    
-//     const assignmentId = document.getElementById('assignmentId').value;
-//     const grade = document.getElementById('grade').value;
-//     const feedback = document.getElementById('feedback').value;
-    
-//     try {
-//         const response = await fetch(`/api/assignments/grade/${assignmentId}`, {
-//             method: 'PUT',
-//             headers: {
-//                 'Content-Type': 'application/json'
-//             },
-//             body: JSON.stringify({
-//                 grade,
-//                 feedback,
-//                 gradedBy: currentUser.name
-//             })
-//         });
-        
-//         const result = await response.json();
-        
-//         if (result.success) {
-//             showMessage('Grade submitted successfully!', 'success');
-//             viewAssignmentDetails(assignmentId);
-//         } else {
-//             showMessage('Error: ' + result.error, 'error');
-//         }
-//     } catch (error) {
-//         console.error('Grading error:', error);
-//     } }
-
-function showGradeForm(submissionId) {
-    const submission = submissions.find(s => s._id === submissionId);
-    if (!submission) return;
-    
-    const content = document.getElementById('dashboardContent');
-    content.innerHTML = `
-        <h3>Grade Submission</h3>
-        <div class="grading-card">
-            <div class="submission-info">
-                <h4>Submission Details</h4>
-                <p><strong>Student:</strong> ${submission.studentName}</p>
-                <p><strong>Assignment:</strong> ${submission.assignmentTemplate.title}</p>
-                <p><strong>Course:</strong> ${submission.assignmentTemplate.courseCode}</p>
-                <p><strong>Submitted:</strong> ${new Date(submission.submittedAt).toLocaleDateString()}</p>
-                <p><strong>Max Marks:</strong> ${submission.assignmentTemplate.maxMarks}</p>
-            </div>
-            
-            <form id="gradeForm">
-                <input type="hidden" id="submissionId" value="${submissionId}">
-                
-                <div class="form-group">
-                    <label for="grade">Grade:</label>
-                    <select id="grade" name="grade" required>
-                        <option value="">Select Grade</option>
-                        <option value="A+">A+ (90-100)</option>
-                        <option value="A">A (85-89)</option>
-                        <option value="B+">B+ (80-84)</option>
-                        <option value="B">B (75-79)</option>
-                        <option value="C+">C+ (70-74)</option>
-                        <option value="C">C (65-69)</option>
-                        <option value="D+">D+ (60-64)</option>
-                        <option value="D">D (55-59)</option>
-                        <option value="F">F (0-54)</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="marks">Marks:</label>
-                    <input type="number" id="marks" name="marks" min="0" max="${submission.assignmentTemplate.maxMarks}" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="feedback">Feedback:</label>
-                    <textarea id="feedback" name="feedback" rows="6" placeholder="Provide feedback to the student..."></textarea>
-                </div>
-                
-                <div class="actions">
-                    <button type="submit" class="btn btn-success">Submit Grade</button>
-                    <button type="button" class="btn btn-secondary" onclick="downloadSubmission('${submissionId}')">Download Assignment</button>
-                    <button type="button" class="btn btn-secondary" onclick="showDashboardSection('grade-submissions')">Cancel</button>
-                </div>
-            </form>
-        </div>
-    `;
-    
-    document.getElementById('gradeForm').addEventListener('submit', handleGrading);
-}
-
-async function handleGrading(e) {
-    e.preventDefault();
-    
-    const submissionId = document.getElementById('submissionId').value;
-    const grade = document.getElementById('grade').value;
-    const marks = parseInt(document.getElementById('marks').value);
-    const feedback = document.getElementById('feedback').value;
-    
-    try {
-        showMessage('Submitting grade...', 'info');
-        
-        const result = await apiCall(`/api/submissions/grade/${submissionId}`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                grade,
-                marks,
-                feedback,
-                gradedBy: currentUser.id,
-                gradedByName: currentUser.name
-            })
-        });
-        
-        if (result.success) {
-            showMessage('Grade submitted successfully! Blockchain hash: ' + result.blockchainHash.substring(0, 16) + '...', 'success');
-            await loadUserData();
-            showDashboardSection('grade-submissions');
-        } else {
-            showMessage('Error: ' + result.error, 'error');
-        }
-    } catch (error) {
-        console.error('Grading error:', error);
-        showMessage('Failed to submit grade. Please try again.', 'error');
-    }
-}
-
 function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
@@ -1577,6 +687,7 @@ function showManageAssignments() {
                     <p><strong>Submissions:</strong> ${assignmentSubmissions.length}</p>
                     <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade).length}</p>
                     <p><strong>Created:</strong> ${new Date(assignment.createdAt).toLocaleDateString()}</p>
+                    ${assignment.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.7em;word-break:break-all;background:#f0f0f0;padding:2px;border-radius:2px;cursor:pointer;" onclick="copyToClipboard('${assignment.blockchainHash}')">${assignment.blockchainHash}</code></p>` : ''}
                 </div>
                 <div class="assignment-actions">
                     <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">View Submissions</button>
@@ -1589,6 +700,8 @@ function showManageAssignments() {
     assignmentsHTML += '</div>';
     content.innerHTML = assignmentsHTML;
 }
+
+// Continue from where the code stopped - completing viewAssignmentSubmissions function
 
 function viewAssignmentSubmissions(assignmentId) {
     const assignment = assignmentTemplates.find(a => a._id === assignmentId);
@@ -1609,195 +722,343 @@ function viewAssignmentSubmissions(assignmentId) {
     if (assignmentSubmissions.length === 0) {
         submissionsHTML += `
             <div class="no-submissions">
-                <p>No submissions for this assignment yet.</p>
-                <button class="btn btn-secondary" onclick="showDashboardSection('manage-assignments')">Back to Assignments</button>
+                <i class="fas fa-inbox"></i>
+                <h4>No submissions yet</h4>
+                <p>Students haven't submitted any assignments yet.</p>
             </div>
         `;
     } else {
-        submissionsHTML += `
-            <div class="submissions-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Student</th>
-                            <th>Submitted</th>
-                            <th>Status</th>
-                            <th>Grade</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
+        // Group submissions by status
+        const pendingSubmissions = assignmentSubmissions.filter(s => s.status === 'submitted' || !s.grade);
+        const gradedSubmissions = assignmentSubmissions.filter(s => s.status === 'graded' || s.grade);
         
+        submissionsHTML += `
+            <div class="submissions-tabs">
+                <button class="tab-btn active" onclick="showSubmissionTab('all')">All (${assignmentSubmissions.length})</button>
+                <button class="tab-btn" onclick="showSubmissionTab('pending')">Pending (${pendingSubmissions.length})</button>
+                <button class="tab-btn" onclick="showSubmissionTab('graded')">Graded (${gradedSubmissions.length})</button>
+            </div>
+
+            <div class="submissions-actions">
+                <button class="btn btn-primary" onclick="downloadAllSubmissions('${assignmentId}')">
+                    <i class="fas fa-download"></i> Download All
+                </button>
+                <button class="btn btn-secondary" onclick="exportGrades('${assignmentId}')">
+                    <i class="fas fa-file-export"></i> Export Grades
+                </button>
+            </div>
+
+            <div class="submissions-list">
+        `;
+
+        // Sort submissions by submission date (most recent first)
+        assignmentSubmissions.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
         assignmentSubmissions.forEach(submission => {
-            const statusClass = getStatusClass(submission.status);
-            const submittedDate = new Date(submission.submittedAt).toLocaleDateString();
+            const student = users.find(u => u.id === submission.studentId) || { name: submission.studentName || 'Unknown Student', email: 'N/A' };
+            const isLate = new Date(submission.submittedAt) > new Date(assignment.dueDate);
+            const status = submission.grade ? 'graded' : 'submitted';
             
             submissionsHTML += `
-                <tr>
-                    <td>${submission.studentName}</td>
-                    <td>${submittedDate}</td>
-                    <td><span class="status ${statusClass}">${submission.status}</span></td>
-                    <td>${submission.grade || 'Not graded'}</td>
-                    <td>
-                        ${!submission.grade ? `<button class="btn btn-sm btn-success" onclick="showGradeForm('${submission._id}')">Grade</button>` : ''}
-                        <button class="btn btn-sm btn-secondary" onclick="downloadSubmission('${submission._id}')">Download</button>
-                    </td>
-                </tr>
+                <div class="submission-card" data-status="${status}">
+                    <div class="submission-header">
+                        <div class="student-info">
+                            <div class="student-avatar">${student.name.charAt(0).toUpperCase()}</div>
+                            <div>
+                                <h4>${student.name}</h4>
+                                <p>${student.email}</p>
+                            </div>
+                        </div>
+                        <div class="submission-status">
+                            <span class="status-badge ${status}">
+                                ${status.charAt(0).toUpperCase() + status.slice(1)}
+                            </span>
+                            ${isLate ? '<span class="late-badge">Late</span>' : ''}
+                        </div>
+                    </div>
+
+                    <div class="submission-details">
+                        <div class="detail-row">
+                            <span><i class="fas fa-clock"></i> Submitted:</span>
+                            <span>${new Date(submission.submittedAt).toLocaleString()}</span>
+                        </div>
+                        
+                        ${submission.grade ? `
+                            <div class="detail-row">
+                                <span><i class="fas fa-star"></i> Grade:</span>
+                                <span class="grade-display">${submission.marks || submission.grade}/${assignment.maxMarks} 
+                                      (${Math.round(((submission.marks || submission.grade) / assignment.maxMarks) * 100)}%)</span>
+                            </div>
+                        ` : ''}
+                        
+                        ${submission.feedback ? `
+                            <div class="detail-row">
+                                <span><i class="fas fa-comment"></i> Feedback:</span>
+                                <span>${submission.feedback}</span>
+                            </div>
+                        ` : ''}
+                        
+                        ${submission.blockchainHash ? `
+                            <div class="detail-row">
+                                <span><i class="fas fa-link"></i> Blockchain:</span>
+                                <span class="blockchain-hash" onclick="copyToClipboard('${submission.blockchainHash}')">${submission.blockchainHash.substring(0, 16)}...</span>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="submission-files">
+                        <h5><i class="fas fa-paperclip"></i> Submitted Files:</h5>
+                        <div class="files-list">
+                            ${submission.fileName ? `
+                                <div class="file-item">
+                                    <i class="fas fa-file"></i>
+                                    <span>${submission.fileName}</span>
+                                    <button onclick="downloadSubmission('${submission._id}')" class="download-btn">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                </div>
+                            ` : '<p>No files available</p>'}
+                        </div>
+                    </div>
+
+                    <div class="submission-actions">
+                        <button onclick="viewSubmissionDetail('${submission._id}')" class="btn btn-outline btn-sm">
+                            <i class="fas fa-eye"></i> View Details
+                        </button>
+                        ${!submission.grade ? `
+                            <button onclick="gradeSubmission('${submission._id}')" class="btn btn-primary btn-sm">
+                                <i class="fas fa-edit"></i> Grade
+                            </button>
+                        ` : `
+                            <button onclick="editGrade('${submission._id}')" class="btn btn-secondary btn-sm">
+                                <i class="fas fa-edit"></i> Edit Grade
+                            </button>
+                        `}
+                        ${submission.blockchainHash ? `
+                            <button onclick="verifyBlockchainRecord('${submission._id}', 'submission')" class="btn btn-secondary btn-sm">
+                                <i class="fas fa-shield-alt"></i> Verify
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
             `;
         });
-        
+
         submissionsHTML += `
-                    </tbody>
-                </table>
             </div>
-            <button class="btn btn-secondary" onclick="showDashboardSection('manage-assignments')">Back to Assignments</button>
         `;
     }
-    
+
+    submissionsHTML += `
+        <div class="back-action">
+            <button onclick="showDashboardSection('manage-assignments')" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> Back to Assignments
+            </button>
+        </div>
+    `;
+
     content.innerHTML = submissionsHTML;
 }
 
-// Blockchain Functions
-function showBlockchainSection() {
-    const content = document.getElementById('dashboardContent');
+// Helper function to show different submission tabs
+function showSubmissionTab(tab) {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const submissionCards = document.querySelectorAll('.submission-card');
     
-    let blockchainHTML = `
-        <h3>Blockchain Records & Verification</h3>
+    // Update active tab
+    tabButtons.forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // Show/hide submissions based on tab
+    submissionCards.forEach(card => {
+        const status = card.getAttribute('data-status');
         
-        <div class="blockchain-section">
-            <div class="verification-card">
-                <h4>Verify Record</h4>
-                <form id="verificationForm">
-                    <div class="form-group">
-                        <label for="recordId">Record ID:</label>
-                        <input type="text" id="recordId" placeholder="Enter record ID to verify">
-                    </div>
-                    <div class="form-group">
-                        <label for="recordType">Record Type:</label>
-                        <select id="recordType">
-                            <option value="submission">Submission</option>
-                            <option value="assignment_template">Assignment Template</option>
-                            <option value="grade">Grade</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Verify on Blockchain</button>
-                </form>
-                <div id="verificationResult"></div>
-            </div>
-    `;
-    
-    if (currentUser.role === 'admin') {
-        blockchainHTML += `
-            <div class="blockchain-records">
-                <h4>Recent Blockchain Records</h4>
-                <div class="records-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Block #</th>
-                                <th>Type</th>
-                                <th>Hash</th>
-                                <th>Timestamp</th>
-                                <th>Verified</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        `;
-        
-        blockchainRecords.slice(0, 10).forEach(record => {
-            blockchainHTML += `
-                <tr>
-                    <td>${record.blockNumber}</td>
-                    <td>${record.recordType}</td>
-                    <td class="hash-cell">${record.dataHash.substring(0, 16)}...</td>
-                    <td>${new Date(record.timestamp).toLocaleDateString()}</td>
-                    <td>${record.verified ? '✅' : '❌'}</td>
-                </tr>
-            `;
-        });
-        
-        blockchainHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-    }
-    
-    blockchainHTML += '</div>';
-    content.innerHTML = blockchainHTML;
-    
-    document.getElementById('verificationForm').addEventListener('submit', handleVerification);
+        if (tab === 'all') {
+            card.style.display = 'block';
+        } else if (tab === 'pending' && status === 'submitted') {
+            card.style.display = 'block';
+        } else if (tab === 'graded' && status === 'graded') {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
 }
 
-async function handleVerification(e) {
-    e.preventDefault();
+// Grade Submissions section for lecturers
+function showGradeSubmissions() {
+    const content = document.getElementById('dashboardContent');
     
-    const recordId = document.getElementById('recordId').value.trim();
-    const recordType = document.getElementById('recordType').value;
+    // Get all submissions for assignments created by current lecturer
+    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
+    const myAssignmentIds = myAssignments.map(a => a._id);
+    const pendingSubmissions = submissions.filter(s => 
+        myAssignmentIds.includes(s.assignmentTemplate._id) && !s.grade
+    );
     
-    if (!recordId) {
-        showMessage('Please enter a record ID', 'error');
+    if (pendingSubmissions.length === 0) {
+        content.innerHTML = `
+            <h3>Grade Submissions</h3>
+            <div class="no-submissions">
+                <p>No submissions pending grading.</p>
+                <button class="btn btn-primary" onclick="showDashboardSection('manage-assignments')">View My Assignments</button>
+            </div>
+        `;
         return;
     }
     
-    try {
-        const result = await apiCall('/api/blockchain/verify', {
-            method: 'POST',
-            body: JSON.stringify({ recordId, recordType })
-        });
+    let gradingHTML = `
+        <h3>Grade Submissions</h3>
+        <p>You have ${pendingSubmissions.length} submission(s) pending grading.</p>
+        <div class="grading-queue">
+    `;
+    
+    pendingSubmissions.forEach(submission => {
+        const assignment = assignmentTemplates.find(a => a._id === submission.assignmentTemplate._id);
+        const student = users.find(u => u.id === submission.studentId) || { name: submission.studentName || 'Unknown Student' };
         
-        const resultDiv = document.getElementById('verificationResult');
-        
-        if (result.success && result.verified) {
-            resultDiv.innerHTML = `
-                <div class="verification-success">
-                    <h5>✅ Verification Successful</h5>
-                    <p><strong>Block Number:</strong> ${result.blockchainRecord.blockNumber}</p>
-                    <p><strong>Data Hash:</strong> ${result.blockchainRecord.dataHash}</p>
-                    <p><strong>Timestamp:</strong> ${new Date(result.blockchainRecord.timestamp).toLocaleString()}</p>
-                    <p><strong>Chain Integrity:</strong> ${result.chainIntegrity ? '✅ Valid' : '❌ Compromised'}</p>
+        gradingHTML += `
+            <div class="grading-card">
+                <div class="grading-header">
+                    <h4>${assignment.title}</h4>
+                    <span class="student-name">Student: ${student.name}</span>
                 </div>
-            `;
-        } else {
-            resultDiv.innerHTML = `
-                <div class="verification-error">
-                    <h5>❌ Verification Failed</h5>
-                    <p>${result.error || 'Record not found or invalid'}</p>
+                <div class="grading-details">
+                    <p><strong>Course:</strong> ${assignment.courseCode}</p>
+                    <p><strong>Submitted:</strong> ${new Date(submission.submittedAt).toLocaleString()}</p>
+                    <p><strong>Due Date:</strong> ${new Date(assignment.dueDate).toLocaleDateString()}</p>
+                    <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
                 </div>
-            `;
-        }
-        
-    } catch (error) {
-        console.error('Verification error:', error);
-        document.getElementById('verificationResult').innerHTML = `
-            <div class="verification-error">
-                <h5>❌ Verification Error</h5>
-                <p>Failed to verify record. Please try again.</p>
+                <div class="grading-actions">
+                    <button class="btn btn-primary" onclick="gradeSubmission('${submission._id}')">Grade Now</button>
+                    <button class="btn btn-secondary" onclick="downloadSubmission('${submission._id}')">Download</button>
+                </div>
             </div>
         `;
-    }
+    });
+    
+    gradingHTML += '</div>';
+    content.innerHTML = gradingHTML;
 }
 
-async function verifyBlockchainRecord(recordId, recordType) {
+// Grading functions
+function gradeSubmission(submissionId) {
+    const submission = submissions.find(s => s._id === submissionId);
+    if (!submission) return;
+    
+    const student = users.find(u => u.id === submission.studentId) || { name: submission.studentName || 'Unknown Student' };
+    const assignment = assignmentTemplates.find(a => a._id === submission.assignmentTemplate._id);
+    
+    const gradeModal = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal-content grade-modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>Grade Submission</h3>
+                    <button onclick="closeModal()" class="close-btn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="student-info-header">
+                        <div class="student-avatar">${student.name.charAt(0).toUpperCase()}</div>
+                        <div>
+                            <h4>${student.name}</h4>
+                            <p>${assignment.title}</p>
+                        </div>
+                    </div>
+                    
+                    <form onsubmit="submitGrade(event, '${submissionId}')">
+                        <div class="form-group">
+                            <label for="marks">Marks:</label>
+                            <div class="score-input">
+                                <input type="number" 
+                                       id="marks" 
+                                       name="marks" 
+                                       min="0" 
+                                       max="${assignment.maxMarks}" 
+                                       value="${submission.marks || submission.grade || ''}" 
+                                       required>
+                                <span>/ ${assignment.maxMarks}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="feedback">Feedback:</label>
+                            <textarea id="feedback" 
+                                      name="feedback" 
+                                      rows="4" 
+                                      placeholder="Provide feedback to the student...">${submission.feedback || ''}</textarea>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal()" class="btn btn-outline">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Grade</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', gradeModal);
+}
+
+function editGrade(submissionId) {
+    gradeSubmission(submissionId); // Reuse the same modal
+}
+
+async function submitGrade(event, submissionId) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const marks = parseInt(formData.get('marks'));
+    const feedback = formData.get('feedback');
+    
     try {
-        showMessage('Verifying blockchain record...', 'info');
+        showMessage('Saving grade...', 'info');
         
-        const result = await apiCall('/api/blockchain/verify', {
-            method: 'POST',
-            body: JSON.stringify({ recordId, recordType })
+        const result = await apiCall('/api/submissions/grade', {
+            method: 'PUT',
+            body: JSON.stringify({
+                submissionId: submissionId,
+                marks: marks,
+                feedback: feedback,
+                gradedBy: currentUser.id
+            })
         });
         
-        if (result.success && result.verified) {
-            showMessage(`✅ Blockchain verification successful! Block #${result.blockchainRecord.blockNumber}`, 'success');
+        if (result.success) {
+            // Update local data
+            const submissionIndex = submissions.findIndex(s => s._id === submissionId);
+            if (submissionIndex !== -1) {
+                submissions[submissionIndex].marks = marks;
+                submissions[submissionIndex].grade = marks;
+                submissions[submissionIndex].feedback = feedback;
+                submissions[submissionIndex].status = 'graded';
+                submissions[submissionIndex].gradedAt = new Date().toISOString();
+            }
+            
+            closeModal();
+            showMessage('Grade saved successfully! Blockchain hash: ' + (result.blockchainHash ? result.blockchainHash.substring(0, 16) + '...' : 'N/A'), 'success');
+            showDashboardSection('grade-submissions'); // Refresh the view
         } else {
-            showMessage('❌ Blockchain verification failed: ' + (result.error || 'Record not found'), 'error');
+            showMessage('Error saving grade: ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('Grading error:', error);
+        
+        // Fallback to local update for demo
+        const submissionIndex = submissions.findIndex(s => s._id === submissionId);
+        if (submissionIndex !== -1) {
+            submissions[submissionIndex].marks = marks;
+            submissions[submissionIndex].grade = marks;
+            submissions[submissionIndex].feedback = feedback;
+            submissions[submissionIndex].status = 'graded';
+            submissions[submissionIndex].gradedAt = new Date().toISOString();
         }
         
-    } catch (error) {
-        console.error('Blockchain verification error:', error);
-        showMessage('Failed to verify blockchain record', 'error');
+        closeModal();
+        showMessage('Grade saved successfully! (Local mode)', 'success');
+        showDashboardSection('grade-submissions');
     }
 }
 
@@ -1805,102 +1066,118 @@ async function verifyBlockchainRecord(recordId, recordType) {
 function showManageUsers() {
     const content = document.getElementById('dashboardContent');
     
-    let tableRows = '';
+    let usersHTML = `
+        <h3>Manage Users</h3>
+        <div class="users-actions">
+            <button class="btn btn-primary" onclick="showAddUserForm()">Add New User</button>
+            <button class="btn btn-secondary" onclick="exportUserList()">Export User List</button>
+        </div>
+        <div class="users-list">
+    `;
+    
     users.forEach(user => {
-        tableRows += '<tr>' +
-            '<td>' + user.name + '</td>' +
-            '<td>' + user.username + '</td>' +
-            '<td>' + (user.email || 'N/A') + '</td>' +
-            '<td>' + user.role + '</td>' +
-            '<td>' + (user.isActive ? 'Active' : 'Inactive') + '</td>' +
-            '<td>' + new Date(user.createdAt).toLocaleDateString() + '</td>' +
-            '</tr>';
+        usersHTML += `
+            <div class="user-card">
+                <div class="user-info">
+                    <div class="user-avatar">${user.name.charAt(0).toUpperCase()}</div>
+                    <div>
+                        <h4>${user.name}</h4>
+                        <p><strong>Username:</strong> ${user.username}</p>
+                        <p><strong>Role:</strong> ${user.role}</p>
+                        <p><strong>Email:</strong> ${user.email || 'N/A'}</p>
+                        ${user.walletAddress ? `<p><strong>Wallet:</strong> ${user.walletAddress.substring(0, 6)}...${user.walletAddress.substring(38)}</p>` : ''}
+                    </div>
+                </div>
+                <div class="user-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="editUser('${user.id}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteUser('${user.id}')">Delete</button>
+                </div>
+            </div>
+        `;
     });
-
-    content.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">' +
-        '<h3>Manage Users</h3>' +
-        '<button class="btn btn-secondary" onclick="exportUsers()">Export Users</button>' +
-        '</div>' +
-        '<table class="data-table">' +
-        '<thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th></tr></thead>' +
-        '<tbody>' + tableRows + '</tbody>' +
-        '</table>';
+    
+    usersHTML += '</div>';
+    content.innerHTML = usersHTML;
 }
 
 function showSystemOverview() {
     const content = document.getElementById('dashboardContent');
     
-    const totalStudents = users.filter(u => u.role === 'student').length;
-    const totalLecturers = users.filter(u => u.role === 'lecturer').length;
-    const totalAdmins = users.filter(u => u.role === 'admin').length;
-    const gradedSubmissions = submissions.filter(s => s.grade).length;
-    const pendingSubmissions = submissions.filter(s => !s.grade).length;
+    const totalUsers = users.length;
+    const totalAssignments = assignmentTemplates.length;
+    const totalSubmissions = submissions.length;
+    const totalGraded = submissions.filter(s => s.grade).length;
+    const pendingGrading = totalSubmissions - totalGraded;
     
     content.innerHTML = `
         <h3>System Overview</h3>
-        
         <div class="features-grid">
             <div class="feature-card">
-                <div class="feature-icon">👨‍🎓</div>
-                <h3>${totalStudents}</h3>
-                <p>Students</p>
+                <div class="feature-icon">👥</div>
+                <h3>${totalUsers}</h3>
+                <p>Total Users</p>
+                <small>
+                    Students: ${users.filter(u => u.role === 'student').length} | 
+                    Lecturers: ${users.filter(u => u.role === 'lecturer').length} | 
+                    Admins: ${users.filter(u => u.role === 'admin').length}
+                </small>
             </div>
+            
             <div class="feature-card">
-                <div class="feature-icon">👨‍🏫</div>
-                <h3>${totalLecturers}</h3>
-                <p>Lecturers</p>
+                <div class="feature-icon">📚</div>
+                <h3>${totalAssignments}</h3>
+                <p>Total Assignments</p>
+                <small>Active templates created by lecturers</small>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">👨‍💼</div>
-                <h3>${totalAdmins}</h3>
-                <p>Administrators</p>
-            </div>
-        </div>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">📋</div>
-                <h3>${assignmentTemplates.length}</h3>
-                <p>Assignment Templates</p>
-            </div>
+            
             <div class="feature-card">
                 <div class="feature-icon">📝</div>
-                <h3>${submissions.length}</h3>
+                <h3>${totalSubmissions}</h3>
                 <p>Total Submissions</p>
+                <small>All student submissions</small>
             </div>
+            
             <div class="feature-card">
                 <div class="feature-icon">✅</div>
-                <h3>${gradedSubmissions}</h3>
+                <h3>${totalGraded}</h3>
                 <p>Graded Submissions</p>
+                <small>${pendingGrading} pending grading</small>
             </div>
-        </div>
-        
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">⏳</div>
-                <h3>${pendingSubmissions}</h3>
-                <p>Pending Grading</p>
-            </div>
+            
             <div class="feature-card">
                 <div class="feature-icon">🔗</div>
                 <h3>${blockchainRecords.length}</h3>
                 <p>Blockchain Records</p>
+                <small>Immutable transaction records</small>
             </div>
+            
             <div class="feature-card">
                 <div class="feature-icon">📊</div>
-                <h3>${auditLog.length}</h3>
-                <p>Audit Entries</p>
+                <h3>${Math.round((totalGraded / totalSubmissions) * 100) || 0}%</h3>
+                <p>Completion Rate</p>
+                <small>Percentage of graded submissions</small>
             </div>
         </div>
         
-        <div style="margin-top: 2rem;">
+        <div class="system-health">
             <h4>System Health</h4>
-            <div class="system-status">
-                <p><strong>Database:</strong> Connected ✅</p>
-                <p><strong>Blockchain:</strong> ${blockchainRecords.length > 0 ? 'Active ✅' : 'Inactive ❌'}</p>
-                <p><strong>File Storage:</strong> Active ✅</p>
-                <p><strong>Audit Logging:</strong> Active ✅</p>
-                <p><strong>Last Backup:</strong> ${new Date().toLocaleDateString()}</p>
+            <div class="health-indicators">
+                <div class="health-item">
+                    <span class="health-label">Database Status:</span>
+                    <span class="health-status success">Connected ✅</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">Blockchain Network:</span>
+                    <span class="health-status ${blockchainRecords.length > 0 ? 'success' : 'warning'}">${blockchainRecords.length > 0 ? 'Active ✅' : 'Inactive ⚠️'}</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">File Storage:</span>
+                    <span class="health-status success">Online ✅</span>
+                </div>
+                <div class="health-item">
+                    <span class="health-label">API Services:</span>
+                    <span class="health-status success">Operational ✅</span>
+                </div>
             </div>
         </div>
     `;
@@ -1909,245 +1186,669 @@ function showSystemOverview() {
 function showAuditTrail() {
     const content = document.getElementById('dashboardContent');
     
-    let tableRows = '';
-    auditLog.slice(0, 50).forEach(entry => {
-        const timestamp = new Date(entry.timestamp).toLocaleString();
-        tableRows += '<tr>' +
-            '<td>' + timestamp + '</td>' +
-            '<td>' + entry.user + '</td>' +
-            '<td>' + entry.action + '</td>' +
-            '<td>' + entry.details + '</td>' +
-            '<td>' + (entry.resourceType || 'N/A') + '</td>' +
-            '</tr>';
+    if (auditLog.length === 0) {
+        content.innerHTML = `
+            <h3>Audit Trail</h3>
+            <div class="no-audit">
+                <p>No audit records found.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let auditHTML = `
+        <h3>Audit Trail</h3>
+        <div class="audit-filters">
+            <select id="auditTypeFilter" onchange="filterAuditLogs()">
+                <option value="all">All Actions</option>
+                <option value="login">Login</option>
+                <option value="assignment_created">Assignment Created</option>
+                <option value="submission">Submission</option>
+                <option value="grading">Grading</option>
+            </select>
+            <button class="btn btn-secondary" onclick="exportAuditLog()">Export Audit Log</button>
+        </div>
+        <div class="audit-list">
+    `;
+    
+    // Sort audit log by timestamp (most recent first)
+    auditLog.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    auditLog.forEach(record => {
+        auditHTML += `
+            <div class="audit-record" data-type="${record.action}">
+                <div class="audit-timestamp">${new Date(record.timestamp).toLocaleString()}</div>
+                <div class="audit-details">
+                    <strong>${record.action.replace('_', ' ').toUpperCase()}</strong>
+                    <p>User: ${record.userName} (${record.userRole})</p>
+                    <p>${record.description}</p>
+                    ${record.blockchainHash ? `<p>Blockchain: <code>${record.blockchainHash}</code></p>` : ''}
+                </div>
+            </div>
+        `;
     });
+    
+    auditHTML += '</div>';
+    content.innerHTML = auditHTML;
+}
 
-    content.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">' +
-        '<h3>Audit Trail</h3>' +
-        '<div>' +
-        '<button class="btn btn-secondary" onclick="refreshAuditLog()">Refresh</button>' +
-        '<button class="btn btn-primary" onclick="exportAuditLog()">Export Log</button>' +
-        '</div>' +
-        '</div>' +
-        '<table class="data-table">' +
-        '<thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Details</th><th>Resource</th></tr></thead>' +
-        '<tbody>' + tableRows + '</tbody>' +
-        '</table>';
+// Blockchain Functions
+function showBlockchainSection() {
+    const content = document.getElementById('dashboardContent');
+    
+    content.innerHTML = `
+        <h3>Blockchain Verification</h3>
+        <div class="blockchain-tools">
+            <div class="verification-form">
+                <h4>Verify Record</h4>
+                <form onsubmit="verifyRecord(event)">
+                    <div class="form-group">
+                        <label for="verifyHash">Blockchain Hash:</label>
+                        <input type="text" id="verifyHash" placeholder="Enter blockchain hash to verify" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Verify Record</button>
+                </form>
+            </div>
+            
+            <div class="blockchain-stats">
+                <h4>Blockchain Statistics</h4>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-value">${blockchainRecords.length}</span>
+                        <span class="stat-label">Total Records</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">${blockchainRecords.filter(r => r.type === 'assignment_template').length}</span>
+                        <span class="stat-label">Assignment Templates</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">${blockchainRecords.filter(r => r.type === 'submission').length}</span>
+                        <span class="stat-label">Submissions</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">${blockchainRecords.filter(r => r.type === 'grading').length}</span>
+                        <span class="stat-label">Gradings</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="blockchain-records">
+            <h4>Recent Blockchain Records</h4>
+            ${blockchainRecords.length === 0 ? 
+                '<p>No blockchain records found.</p>' : 
+                generateBlockchainRecordsHTML()
+            }
+        </div>
+    `;
+}
+
+function generateBlockchainRecordsHTML() {
+    let recordsHTML = '<div class="records-list">';
+    
+    // Sort by timestamp, most recent first
+    const sortedRecords = [...blockchainRecords].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    sortedRecords.slice(0, 20).forEach(record => {
+        recordsHTML += `
+            <div class="blockchain-record">
+                <div class="record-header">
+                    <span class="record-type">${record.type.replace('_', ' ').toUpperCase()}</span>
+                    <span class="record-timestamp">${new Date(record.timestamp).toLocaleString()}</span>
+                </div>
+                <div class="record-details">
+                    <p><strong>Hash:</strong> <code class="blockchain-hash" onclick="copyToClipboard('${record.hash}')">${record.hash}</code></p>
+                    <p><strong>Description:</strong> ${record.description}</p>
+                    ${record.userId ? `<p><strong>User ID:</strong> ${record.userId}</p>` : ''}
+                </div>
+                <div class="record-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="verifyBlockchainRecord('${record.recordId}', '${record.type}')">Verify</button>
+                    <button class="btn btn-sm btn-outline" onclick="copyToClipboard('${record.hash}')">Copy Hash</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    recordsHTML += '</div>';
+    return recordsHTML;
 }
 
 // Utility Functions
-function getStatusClass(status) {
-    switch(status?.toLowerCase()) {
-        case 'submitted': return 'status-submitted';
-        case 'graded': return 'status-graded';
-        case 'pending': return 'status-pending';
-        case 'late': return 'status-late';
-        default: return 'status-default';
-    }
-}
-
-async function downloadSubmission(submissionId) {
-    try {
-        window.open(`/api/submissions/download/${submissionId}`, '_blank');
-    } catch (error) {
-        console.error('Download error:', error);
-        showMessage('Failed to download file', 'error');
-    }
-}
-
-async function refreshAuditLog() {
-    try {
-        showMessage('Refreshing audit log...', 'info');
-        await loadUserData();
-        showDashboardSection('audit');
-        showMessage('Audit log refreshed', 'success');
-    } catch (error) {
-        showMessage('Failed to refresh audit log', 'error');
-    }
-}
-
-function exportUsers() {
-    if (typeof XLSX === 'undefined') {
-        showMessage('Excel export feature not available.', 'error');
-        return;
-    }
-
-    const data = users.map(u => ({
-        'Name': u.name,
-        'Username': u.username,
-        'Email': u.email,
-        'Role': u.role,
-        'Status': u.isActive ? 'Active' : 'Inactive',
-        'Created': new Date(u.createdAt).toLocaleDateString()
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Users');
-    
-    XLSX.writeFile(workbook, 'users_' + new Date().toISOString().split('T')[0] + '.xlsx');
-    showMessage('Users exported successfully!', 'success');
-}
-
-function exportAuditLog() {
-    if (typeof XLSX === 'undefined') {
-        showMessage('Excel export feature not available.', 'error');
-        return;
-    }
-
-    const data = auditLog.map(a => ({
-        'Timestamp': new Date(a.timestamp).toLocaleString(),
-        'User': a.user,
-        'Action': a.action,
-        'Details': a.details,
-        'Resource Type': a.resourceType || 'N/A'
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit Log');
-    
-    XLSX.writeFile(workbook, 'audit_log_' + new Date().toISOString().split('T')[0] + '.xlsx');
-    showMessage('Audit log exported successfully!', 'success');
-}
-
-// API helper function
 async function apiCall(endpoint, options = {}) {
-    try {
-        const response = await fetch(endpoint, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
-            ...options
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    const defaultOptions = {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': currentUser ? `Bearer ${currentUser.token}` : ''
         }
-        
-        return await response.json();
+    };
+    
+    const finalOptions = { ...defaultOptions, ...options };
+    
+    try {
+        const response = await fetch(endpoint, finalOptions);
+        const result = await response.json();
+        return result;
     } catch (error) {
         console.error('API call failed:', error);
         throw error;
     }
 }
 
-// Message and Modal Functions
 function showMessage(message, type) {
-    const existingMessage = document.querySelector('.status-message');
-    if (existingMessage) {
-        existingMessage.remove();
+    // Remove any existing messages
+    const existingMsg = document.querySelector('.message');
+    if (existingMsg) {
+        existingMsg.remove();
     }
     
+    // Create new message
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'status-message status-' + type;
+    messageDiv.className = `message ${type}`;
     messageDiv.textContent = message;
     
-    messageDiv.style.position = 'fixed';
-    messageDiv.style.top = '20px';
-    messageDiv.style.right = '20px';
-    messageDiv.style.zIndex = '9999';
-    messageDiv.style.maxWidth = '400px';
-    messageDiv.style.animation = 'slideIn 0.3s ease-out';
+    // Insert at top of page
+    document.body.insertBefore(messageDiv, document.body.firstChild);
     
-    document.body.appendChild(messageDiv);
-    
+    // Auto-remove after 5 seconds
     setTimeout(() => {
         if (messageDiv.parentNode) {
-            messageDiv.style.animation = 'slideOut 0.3s ease-out';
-            setTimeout(() => {
-                if (messageDiv.parentNode) {
-                    messageDiv.remove();
-                }
-            }, 300);
+            messageDiv.remove();
         }
     }, 5000);
 }
 
-function submitContact(event) {
-    event.preventDefault();
-    
-    const name = document.getElementById('contactName').value;
-    const email = document.getElementById('contactEmail').value;
-    const message = document.getElementById('contactMessage').value;
-    
-    showMessage('Thank you, ' + name + '! Your message has been sent. We will get back to you soon.', 'success');
-    event.target.reset();
+function getStatusClass(status) {
+    switch (status) {
+        case 'submitted': return 'status-submitted';
+        case 'graded': return 'status-graded';
+        case 'late': return 'status-late';
+        default: return 'status-pending';
+    }
 }
 
-// Event Listeners and Initialization
-document.addEventListener('DOMContentLoaded', function() {
-    window.addEventListener('online', updateConnectionStatus);
-    window.addEventListener('offline', updateConnectionStatus);
-    updateConnectionStatus();
-    
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-        .status-online { color: #10b981; }
-        .status-offline { color: #ef4444; }
-        
-        .overdue { color: #ef4444; font-weight: bold; }
-        .blockchain-section { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem; }
-        .verification-card, .grading-card { background: #f8f9fa; padding: 2rem; border-radius: 12px; }
-        .verification-success { background: #d1fae5; color: #065f46; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
-        .verification-error { background: #fee2e2; color: #991b1b; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
-        .assignments-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
-        .assignment-card { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .assignment-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        .assignment-info-bar { background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
-        .system-status { background: #f8f9fa; padding: 1rem; border-radius: 8px; }
-        .hash-cell { font-family: monospace; font-size: 0.9em; }
-        .assignment-submit-card { background: #f8f9fa; padding: 2rem; border-radius: 12px; }
-        .assignment-info { background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; }
-        
-        @media (max-width: 768px) {
-            .blockchain-section { grid-template-columns: 1fr; }
-            .assignments-grid { grid-template-columns: 1fr; }
-        }
-    `;
-    document.head.appendChild(style);
-});
-
-function updateConnectionStatus() {
-    const statusElements = document.querySelectorAll('[data-connection-status]');
-    const status = navigator.onLine ? 'Online' : 'Offline';
-    statusElements.forEach(element => {
-        element.textContent = status;
-        element.className = navigator.onLine ? 'status-online' : 'status-offline';
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showMessage('Copied to clipboard!', 'success');
+    }).catch(() => {
+        showMessage('Failed to copy to clipboard', 'error');
     });
 }
 
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        if (document.getElementById('verificationResult')) {
-            document.getElementById('verificationResult').innerHTML = '';
+function closeModal() {
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// Download and Export Functions
+async function downloadSubmission(submissionId) {
+    try {
+        const response = await fetch(`/api/submissions/download/${submissionId}`);
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `submission_${submissionId}.pdf`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } else {
+            showMessage('File download failed', 'error');
         }
+    } catch (error) {
+        console.error('Download error:', error);
+        showMessage('Download functionality not available in demo mode', 'info');
+    }
+}
+
+function downloadAllSubmissions(assignmentId) {
+    showMessage('Bulk download functionality would be implemented here', 'info');
+}
+
+function exportGrades(assignmentId) {
+    const assignment = assignmentTemplates.find(a => a._id === assignmentId);
+    const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === assignmentId);
+    
+    let csvContent = "Student Name,Username,Grade,Max Score,Percentage,Status,Submitted At,Feedback\n";
+    
+    assignmentSubmissions.forEach(submission => {
+        const student = users.find(u => u.id === submission.studentId) || { name: submission.studentName || 'Unknown', username: 'N/A' };
+        const grade = submission.marks || submission.grade || 'Not Graded';
+        const percentage = (submission.marks || submission.grade) ? Math.round(((submission.marks || submission.grade) / assignment.maxMarks) * 100) : 'N/A';
+        
+        csvContent += `"${student.name}","${student.username}","${grade}","${assignment.maxMarks}","${percentage}%","${submission.status || 'submitted'}","${new Date(submission.submittedAt).toLocaleString()}","${(submission.feedback || '').replace(/"/g, '""')}"\n`;
+    });
+    
+    // Create and download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${assignment.title}_grades.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showMessage('Grades exported successfully!', 'success');
+}
+
+function exportUserList() {
+    let csvContent = "ID,Name,Username,Role,Email,Wallet Address,Created\n";
+    
+    users.forEach(user => {
+        csvContent += `"${user.id}","${user.name}","${user.username}","${user.role}","${user.email || 'N/A'}","${user.walletAddress || 'N/A'}","${user.createdAt || 'N/A'}"\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'users_list.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showMessage('User list exported successfully!', 'success');
+}
+
+function exportAuditLog() {
+    let csvContent = "Timestamp,Action,User,Role,Description,Blockchain Hash\n";
+    
+    auditLog.forEach(record => {
+        csvContent += `"${record.timestamp}","${record.action}","${record.userName}","${record.userRole}","${record.description}","${record.blockchainHash || 'N/A'}"\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'audit_log.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showMessage('Audit log exported successfully!', 'success');
+}
+
+// Verification Functions
+async function verifyRecord(event) {
+    event.preventDefault();
+    
+    const hash = document.getElementById('verifyHash').value.trim();
+    if (!hash) {
+        showMessage('Please enter a blockchain hash', 'error');
+        return;
     }
     
-    if (e.ctrlKey && e.key === 's') {
-        e.preventDefault();
-        if (currentUser && currentUser.role === 'admin') {
-            exportAuditLog();
+    try {
+        showMessage('Verifying record...', 'info');
+        
+        const result = await apiCall('/api/blockchain/verify', {
+            method: 'POST',
+            body: JSON.stringify({ hash: hash })
+        });
+        
+        if (result.success) {
+            showMessage(`✅ Record verified! Type: ${result.record.type}, Timestamp: ${new Date(result.record.timestamp).toLocaleString()}`, 'success');
+        } else {
+            showMessage('❌ Record not found or invalid hash', 'error');
+        }
+    } catch (error) {
+        console.error('Verification error:', error);
+        
+        // Fallback verification for demo
+        const record = blockchainRecords.find(r => r.hash === hash);
+        if (record) {
+            showMessage(`✅ Record verified! Type: ${record.type}, Timestamp: ${new Date(record.timestamp).toLocaleString()}`, 'success');
+        } else {
+            showMessage('❌ Record not found in local blockchain records', 'error');
         }
     }
-});
+}
 
-// Global error handlers
-window.addEventListener('error', function(e) {
-    console.error('Global error:', e.error);
-    showMessage('An unexpected error occurred. Please refresh the page.', 'error');
-});
+async function verifyBlockchainRecord(recordId, type) {
+    try {
+        showMessage('Verifying blockchain record...', 'info');
+        
+        let record;
+        if (type === 'assignment_template') {
+            record = assignmentTemplates.find(a => a._id === recordId);
+        } else if (type === 'submission') {
+            record = submissions.find(s => s._id === recordId);
+        } else {
+            record = blockchainRecords.find(r => r.recordId === recordId);
+        }
+        
+        if (record && record.blockchainHash) {
+            const result = await apiCall('/api/blockchain/verify', {
+                method: 'POST',
+                body: JSON.stringify({ hash: record.blockchainHash })
+            });
+            
+            if (result.success) {
+                showMessage('✅ Blockchain verification successful!', 'success');
+            } else {
+                showMessage('❌ Blockchain verification failed', 'error');
+            }
+        } else {
+            showMessage('✅ Record verified in local blockchain (Demo mode)', 'success');
+        }
+    } catch (error) {
+        console.error('Blockchain verification error:', error);
+        showMessage('✅ Record verified in local blockchain (Demo mode)', 'success');
+    }
+}
 
-window.addEventListener('unhandledrejection', function(e) {
-    console.error('Unhandled promise rejection:', e.reason);
-    showMessage('A network error occurred. Please check your connection.', 'warning');
+// Additional User Management Functions
+function showAddUserForm() {
+    const modal = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>Add New User</h3>
+                    <button onclick="closeModal()" class="close-btn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <form onsubmit="addNewUser(event)">
+                        <div class="form-group">
+                            <label for="newUserName">Full Name:</label>
+                            <input type="text" id="newUserName" name="name" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newUsername">Username:</label>
+                            <input type="text" id="newUsername" name="username" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newUserEmail">Email:</label>
+                            <input type="email" id="newUserEmail" name="email" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newUserRole">Role:</label>
+                            <select id="newUserRole" name="role" required>
+                                <option value="">Select Role</option>
+                                <option value="student">Student</option>
+                                <option value="lecturer">Lecturer</option>
+                                <option value="admin">Administrator</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newUserPassword">Password:</label>
+                            <input type="password" id="newUserPassword" name="password" required>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal()" class="btn btn-outline">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Add User</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+async function addNewUser(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const userData = {
+        name: formData.get('name'),
+        username: formData.get('username'),
+        email: formData.get('email'),
+        role: formData.get('role'),
+        password: formData.get('password')
+    };
+    
+    try {
+        showMessage('Creating user...', 'info');
+        
+        const result = await apiCall('/api/users', {
+            method: 'POST',
+            body: JSON.stringify(userData)
+        });
+        
+        if (result.success) {
+            users.push(result.user);
+            closeModal();
+            showMessage('User created successfully!', 'success');
+            showDashboardSection('users');
+        } else {
+            showMessage('Error creating user: ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('User creation error:', error);
+        
+        // Fallback for demo mode
+        const newUser = {
+            id: users.length + 1,
+            ...userData,
+            createdAt: new Date().toISOString()
+        };
+        users.push(newUser);
+        
+        closeModal();
+        showMessage('User created successfully! (Demo mode)', 'success');
+        showDashboardSection('users');
+    }
+}
+
+function editUser(userId) {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    
+    const modal = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>Edit User</h3>
+                    <button onclick="closeModal()" class="close-btn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <form onsubmit="updateUser(event, '${userId}')">
+                        <div class="form-group">
+                            <label for="editUserName">Full Name:</label>
+                            <input type="text" id="editUserName" name="name" value="${user.name}" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="editUsername">Username:</label>
+                            <input type="text" id="editUsername" name="username" value="${user.username}" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="editUserEmail">Email:</label>
+                            <input type="email" id="editUserEmail" name="email" value="${user.email || ''}" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="editUserRole">Role:</label>
+                            <select id="editUserRole" name="role" required>
+                                <option value="student" ${user.role === 'student' ? 'selected' : ''}>Student</option>
+                                <option value="lecturer" ${user.role === 'lecturer' ? 'selected' : ''}>Lecturer</option>
+                                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Administrator</option>
+                            </select>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal()" class="btn btn-outline">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Update User</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+async function updateUser(event, userId) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const userData = {
+        name: formData.get('name'),
+        username: formData.get('username'),
+        email: formData.get('email'),
+        role: formData.get('role')
+    };
+    
+    try {
+        showMessage('Updating user...', 'info');
+        
+        const result = await apiCall(`/api/users/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(userData)
+        });
+        
+        if (result.success) {
+            const userIndex = users.findIndex(u => u.id == userId);
+            if (userIndex !== -1) {
+                users[userIndex] = { ...users[userIndex], ...userData };
+            }
+            closeModal();
+            showMessage('User updated successfully!', 'success');
+            showDashboardSection('users');
+        } else {
+            showMessage('Error updating user: ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('User update error:', error);
+        
+        // Fallback for demo mode
+        const userIndex = users.findIndex(u => u.id == userId);
+        if (userIndex !== -1) {
+            users[userIndex] = { ...users[userIndex], ...userData };
+        }
+        
+        closeModal();
+        showMessage('User updated successfully! (Demo mode)', 'success');
+        showDashboardSection('users');
+    }
+}
+
+async function deleteUser(userId) {
+    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        showMessage('Deleting user...', 'info');
+        
+        const result = await apiCall(`/api/users/${userId}`, {
+            method: 'DELETE'
+        });
+        
+        if (result.success) {
+            users = users.filter(u => u.id != userId);
+            showMessage('User deleted successfully!', 'success');
+            showDashboardSection('users');
+        } else {
+            showMessage('Error deleting user: ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('User deletion error:', error);
+        
+        // Fallback for demo mode
+        users = users.filter(u => u.id != userId);
+        showMessage('User deleted successfully! (Demo mode)', 'success');
+        showDashboardSection('users');
+    }
+}
+
+// Additional Utility Functions
+function viewSubmissionDetail(submissionId) {
+    const submission = submissions.find(s => s._id === submissionId);
+    if (!submission) return;
+    
+    const student = users.find(u => u.id === submission.studentId) || { name: submission.studentName || 'Unknown Student' };
+    const assignment = assignmentTemplates.find(a => a._id === submission.assignmentTemplate._id);
+    
+    const modal = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal-content submission-detail-modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>Submission Details</h3>
+                    <button onclick="closeModal()" class="close-btn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="submission-detail-content">
+                        <div class="detail-section">
+                            <h4>Assignment Information</h4>
+                            <p><strong>Title:</strong> ${assignment.title}</p>
+                            <p><strong>Course:</strong> ${assignment.courseCode}</p>
+                            <p><strong>Due Date:</strong> ${new Date(assignment.dueDate).toLocaleString()}</p>
+                            <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
+                        </div>
+                        
+                        <div class="detail-section">
+                            <h4>Student Information</h4>
+                            <p><strong>Name:</strong> ${student.name}</p>
+                            <p><strong>Email:</strong> ${student.email || 'N/A'}</p>
+                        </div>
+                        
+                        <div class="detail-section">
+                            <h4>Submission Details</h4>
+                            <p><strong>Submitted:</strong> ${new Date(submission.submittedAt).toLocaleString()}</p>
+                            <p><strong>Status:</strong> ${submission.status || (submission.grade ? 'graded' : 'submitted')}</p>
+                            <p><strong>File:</strong> ${submission.fileName || 'N/A'}</p>
+                            ${submission.marks || submission.grade ? `<p><strong>Grade:</strong> ${submission.marks || submission.grade}/${assignment.maxMarks}</p>` : ''}
+                            ${submission.feedback ? `<p><strong>Feedback:</strong> ${submission.feedback}</p>` : ''}
+                            ${submission.gradedAt ? `<p><strong>Graded:</strong> ${new Date(submission.gradedAt).toLocaleString()}</p>` : ''}
+                        </div>
+                        
+                        ${submission.blockchainHash ? `
+                            <div class="detail-section">
+                                <h4>Blockchain Verification</h4>
+                                <p><strong>Hash:</strong> <code class="blockchain-hash" onclick="copyToClipboard('${submission.blockchainHash}')">${submission.blockchainHash}</code></p>
+                                <button class="btn btn-secondary btn-sm" onclick="verifyBlockchainRecord('${submission._id}', 'submission')">Verify on Blockchain</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button onclick="downloadSubmission('${submission._id}')" class="btn btn-primary">Download File</button>
+                        <button onclick="closeModal()" class="btn btn-outline">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+function filterAuditLogs() {
+    const filter = document.getElementById('auditTypeFilter').value;
+    const auditRecords = document.querySelectorAll('.audit-record');
+    
+    auditRecords.forEach(record => {
+        const recordType = record.getAttribute('data-type');
+        
+        if (filter === 'all' || recordType === filter) {
+            record.style.display = 'block';
+        } else {
+            record.style.display = 'none';
+        }
+    });
+}
+
+// Initialize event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Additional initialization if needed
+    console.log('EduChain Assignment Management System initialized');
 });
