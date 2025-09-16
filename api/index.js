@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -21,7 +22,6 @@ app.use(express.json());
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadPath = path.join('/tmp', 'uploads', 'assignments');
-    // Create directory if it doesn't exist
     fs.mkdirSync(uploadPath, { recursive: true });
     cb(null, uploadPath);
   },
@@ -33,9 +33,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: function (req, file, cb) {
     const allowedTypes = /pdf|doc|docx|txt|zip/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -49,23 +47,58 @@ const upload = multer({
   }
 });
 
-// Schemas
-const assignmentSchema = new mongoose.Schema({
+// Enhanced Schemas
+
+// Assignment Template Schema (Created by Lecturers)
+const assignmentTemplateSchema = new mongoose.Schema({
   title: { type: String, required: true },
+  description: { type: String, required: true },
   courseCode: { type: String, required: true },
-  description: { type: String },
-  studentId: { type: String, required: true },
+  instructions: { type: String },
+  dueDate: { type: Date, required: true },
+  maxMarks: { type: Number, default: 100 },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  createdByName: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  isActive: { type: Boolean, default: true },
+  blockchainHash: { type: String },
+  blockchainTx: { type: String }
+});
+
+// Student Submission Schema
+const submissionSchema = new mongoose.Schema({
+  assignmentTemplate: { type: mongoose.Schema.Types.ObjectId, ref: 'AssignmentTemplate', required: true },
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   studentName: { type: String, required: true },
   fileName: { type: String },
   filePath: { type: String },
   originalName: { type: String },
-  dueDate: { type: Date, required: true },
+  fileSize: { type: Number },
+  fileHash: { type: String }, // SHA-256 hash of file content
   submittedAt: { type: Date, default: Date.now },
-  status: { type: String, enum: ['submitted', 'graded', 'pending', 'late'], default: 'submitted' },
+  status: { type: String, enum: ['submitted', 'graded', 'late'], default: 'submitted' },
   grade: { type: String },
+  marks: { type: Number },
   feedback: { type: String },
-  gradedBy: { type: String },
-  gradedAt: { type: Date }
+  gradedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  gradedByName: { type: String },
+  gradedAt: { type: Date },
+  blockchainHash: { type: String },
+  blockchainTx: { type: String },
+  verificationHash: { type: String } // Combined hash for blockchain verification
+});
+
+// Blockchain Record Schema
+const blockchainRecordSchema = new mongoose.Schema({
+  recordType: { type: String, enum: ['assignment_template', 'submission', 'grade'], required: true },
+  recordId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  dataHash: { type: String, required: true },
+  previousHash: { type: String },
+  blockNumber: { type: Number, required: true },
+  timestamp: { type: Date, default: Date.now },
+  merkleRoot: { type: String },
+  nonce: { type: String },
+  verified: { type: Boolean, default: true }
 });
 
 const userSchema = new mongoose.Schema({
@@ -83,17 +116,80 @@ userSchema.methods.comparePassword = function(candidatePassword) {
   return candidatePassword === this.password;
 };
 
+// Enhanced Audit Log Schema
 const auditLogSchema = new mongoose.Schema({
   user: { type: String, required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   action: { type: String, required: true },
   details: { type: String, required: true },
+  resourceType: { type: String, enum: ['assignment_template', 'submission', 'user', 'grade', 'blockchain'] },
+  resourceId: { type: mongoose.Schema.Types.ObjectId },
   timestamp: { type: Date, default: Date.now },
-  ipAddress: { type: String }
+  ipAddress: { type: String },
+  blockchainHash: { type: String },
+  metadata: { type: mongoose.Schema.Types.Mixed }
 });
 
-const Assignment = mongoose.model('Assignment', assignmentSchema);
+const AssignmentTemplate = mongoose.model('AssignmentTemplate', assignmentTemplateSchema);
+const Submission = mongoose.model('Submission', submissionSchema);
+const BlockchainRecord = mongoose.model('BlockchainRecord', blockchainRecordSchema);
 const User = mongoose.model('User', userSchema);
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+
+// Blockchain Helper Functions
+function generateHash(data) {
+  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+}
+
+function generateMerkleRoot(hashes) {
+  if (hashes.length === 0) return '';
+  if (hashes.length === 1) return hashes[0];
+  
+  const newHashes = [];
+  for (let i = 0; i < hashes.length; i += 2) {
+    const left = hashes[i];
+    const right = i + 1 < hashes.length ? hashes[i + 1] : left;
+    newHashes.push(crypto.createHash('sha256').update(left + right).digest('hex'));
+  }
+  
+  return generateMerkleRoot(newHashes);
+}
+
+async function createBlockchainRecord(recordType, recordId, data) {
+  const dataHash = generateHash(data);
+  const lastRecord = await BlockchainRecord.findOne().sort({ blockNumber: -1 });
+  const blockNumber = lastRecord ? lastRecord.blockNumber + 1 : 1;
+  const previousHash = lastRecord ? lastRecord.dataHash : '0';
+  
+  const blockchainRecord = new BlockchainRecord({
+    recordType,
+    recordId,
+    dataHash,
+    previousHash,
+    blockNumber,
+    nonce: crypto.randomBytes(16).toString('hex'),
+    merkleRoot: generateMerkleRoot([dataHash, previousHash])
+  });
+  
+  await blockchainRecord.save();
+  return blockchainRecord;
+}
+
+async function logActivity(userId, userName, action, details, resourceType, resourceId, ipAddress, metadata = {}) {
+  const auditEntry = new AuditLog({
+    user: userName,
+    userId,
+    action,
+    details,
+    resourceType,
+    resourceId,
+    ipAddress,
+    metadata
+  });
+  
+  await auditEntry.save();
+  return auditEntry;
+}
 
 // Database seeding
 async function seedDatabase() {
@@ -127,8 +223,32 @@ async function seedDatabase() {
         }
       ];
 
-      await User.insertMany(initialUsers);
-      console.log('✅ Initial users created');
+      const createdUsers = await User.insertMany(initialUsers);
+      
+      // Create sample assignment template
+      const lecturer = createdUsers.find(u => u.role === 'lecturer');
+      const sampleAssignment = new AssignmentTemplate({
+        title: 'Web Development Fundamentals',
+        description: 'Create a responsive website using HTML, CSS, and JavaScript',
+        courseCode: 'CS101',
+        instructions: 'Submit a zip file containing your HTML, CSS, and JS files. Include a README with setup instructions.',
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+        maxMarks: 100,
+        createdBy: lecturer._id,
+        createdByName: lecturer.name
+      });
+      
+      await sampleAssignment.save();
+      
+      // Create blockchain record for assignment
+      await createBlockchainRecord('assignment_template', sampleAssignment._id, {
+        title: sampleAssignment.title,
+        courseCode: sampleAssignment.courseCode,
+        createdBy: sampleAssignment.createdByName,
+        createdAt: sampleAssignment.createdAt
+      });
+      
+      console.log('✅ Initial users and sample assignment created');
     }
   } catch (error) {
     console.error('❌ Seeding error:', error);
@@ -144,6 +264,8 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/educhain'
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Routes
+
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
@@ -160,6 +282,7 @@ app.post('/api/auth/login', async (req, res) => {
     const user = await User.findOne({ username: username.trim() });
     
     if (!user || password !== user.password) {
+      await logActivity(null, username, 'Failed Login Attempt', `Invalid credentials for ${username}`, 'user', null, req.ip);
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
@@ -168,12 +291,7 @@ app.post('/api/auth/login', async (req, res) => {
       await user.save();
     }
 
-    await AuditLog.create({
-      user: user.name,
-      action: 'Login',
-      details: `User logged in from ${req.ip}`,
-      ipAddress: req.ip
-    });
+    await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'user', user._id, req.ip, { walletAddress });
 
     res.json({
       success: true,
@@ -192,42 +310,147 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Submit Assignment
+// Assignment Template Routes (Lecturer Only)
+app.post('/api/assignments/template', async (req, res) => {
+  try {
+    const { title, description, courseCode, instructions, dueDate, maxMarks, createdBy, createdByName } = req.body;
+    
+    const assignmentTemplate = new AssignmentTemplate({
+      title,
+      description,
+      courseCode,
+      instructions,
+      dueDate: new Date(dueDate),
+      maxMarks: maxMarks || 100,
+      createdBy,
+      createdByName
+    });
+    
+    await assignmentTemplate.save();
+    
+    // Create blockchain record
+    const blockchainRecord = await createBlockchainRecord('assignment_template', assignmentTemplate._id, {
+      title,
+      description,
+      courseCode,
+      createdBy: createdByName,
+      createdAt: assignmentTemplate.createdAt
+    });
+    
+    assignmentTemplate.blockchainHash = blockchainRecord.dataHash;
+    assignmentTemplate.blockchainTx = blockchainRecord._id.toString();
+    await assignmentTemplate.save();
+    
+    await logActivity(createdBy, createdByName, 'Assignment Template Created', `Created assignment: ${title}`, 'assignment_template', assignmentTemplate._id, req.ip, {
+      courseCode,
+      dueDate,
+      blockchainHash: blockchainRecord.dataHash
+    });
+    
+    res.json({
+      success: true,
+      message: 'Assignment template created successfully',
+      assignment: assignmentTemplate,
+      blockchainHash: blockchainRecord.dataHash
+    });
+    
+  } catch (error) {
+    console.error('Assignment template creation error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create assignment template' });
+  }
+});
+
+// Get assignment templates (for students to view available assignments)
+app.get('/api/assignments/templates', async (req, res) => {
+  try {
+    const templates = await AssignmentTemplate.find({ isActive: true })
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 });
+    
+    res.json({ success: true, templates });
+  } catch (error) {
+    console.error('Error fetching assignment templates:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch assignment templates' });
+  }
+});
+
+// Submit assignment (students)
 app.post('/api/assignments/submit', upload.single('assignmentFile'), async (req, res) => {
   try {
-    const { title, courseCode, description, studentId, studentName, dueDate } = req.body;
+    const { assignmentTemplateId, studentId, studentName } = req.body;
     
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
     
-    const due = new Date(dueDate);
-    const now = new Date();
-    const status = now > due ? 'late' : 'submitted';
+    // Check if assignment template exists
+    const template = await AssignmentTemplate.findById(assignmentTemplateId);
+    if (!template) {
+      return res.status(404).json({ success: false, error: 'Assignment template not found' });
+    }
     
-    const assignment = new Assignment({
-      title,
-      courseCode,
-      description,
+    // Generate file hash
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+    
+    // Check submission status
+    const now = new Date();
+    const status = now > template.dueDate ? 'late' : 'submitted';
+    
+    const submission = new Submission({
+      assignmentTemplate: assignmentTemplateId,
       studentId,
       studentName,
       fileName: req.file.filename,
       filePath: req.file.path,
       originalName: req.file.originalname,
-      dueDate: due,
+      fileSize: req.file.size,
+      fileHash,
       status
     });
     
-    const savedAssignment = await assignment.save();
+    // Generate verification hash
+    submission.verificationHash = generateHash({
+      assignmentTemplateId,
+      studentId,
+      fileName: req.file.originalname,
+      fileHash,
+      submittedAt: submission.submittedAt
+    });
+    
+    await submission.save();
+    
+    // Create blockchain record
+    const blockchainRecord = await createBlockchainRecord('submission', submission._id, {
+      assignmentTemplateId,
+      studentId,
+      studentName,
+      fileHash,
+      submittedAt: submission.submittedAt,
+      verificationHash: submission.verificationHash
+    });
+    
+    submission.blockchainHash = blockchainRecord.dataHash;
+    submission.blockchainTx = blockchainRecord._id.toString();
+    await submission.save();
+    
+    await logActivity(studentId, studentName, 'Assignment Submitted', `Submitted assignment: ${template.title}`, 'submission', submission._id, req.ip, {
+      assignmentTitle: template.title,
+      courseCode: template.courseCode,
+      fileHash,
+      status,
+      blockchainHash: blockchainRecord.dataHash
+    });
     
     res.json({
       success: true,
       message: 'Assignment submitted successfully',
-      assignment: {
-        id: savedAssignment._id,
-        title: savedAssignment.title,
-        status: savedAssignment.status,
-        submittedAt: savedAssignment.submittedAt
+      submission: {
+        id: submission._id,
+        status: submission.status,
+        submittedAt: submission.submittedAt,
+        blockchainHash: blockchainRecord.dataHash,
+        verificationHash: submission.verificationHash
       }
     });
     
@@ -238,10 +461,12 @@ app.post('/api/assignments/submit', upload.single('assignmentFile'), async (req,
 });
 
 // Get student's submissions
-app.get('/api/assignments/student/:studentId', async (req, res) => {
+app.get('/api/submissions/student/:studentId', async (req, res) => {
   try {
     const { studentId } = req.params;
-    const submissions = await Assignment.find({ studentId })
+    
+    const submissions = await Submission.find({ studentId })
+      .populate('assignmentTemplate', 'title courseCode dueDate maxMarks')
       .sort({ submittedAt: -1 })
       .select('-filePath');
     
@@ -252,28 +477,163 @@ app.get('/api/assignments/student/:studentId', async (req, res) => {
   }
 });
 
-// Get specific submission details
-app.get('/api/assignments/submission/:submissionId', async (req, res) => {
+// Get all submissions (for lecturers)
+app.get('/api/submissions/all', async (req, res) => {
+  try {
+    const submissions = await Submission.find({})
+      .populate('assignmentTemplate', 'title courseCode dueDate maxMarks createdByName')
+      .populate('studentId', 'name email')
+      .sort({ submittedAt: -1 })
+      .select('-filePath');
+    
+    res.json({ success: true, submissions });
+  } catch (error) {
+    console.error('Error fetching all submissions:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch submissions' });
+  }
+});
+
+// Grade submission (lecturers only)
+app.put('/api/submissions/grade/:submissionId', async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const submission = await Assignment.findById(submissionId).select('-filePath');
+    const { grade, marks, feedback, gradedBy, gradedByName } = req.body;
+    
+    const submission = await Submission.findById(submissionId)
+      .populate('assignmentTemplate', 'title courseCode maxMarks');
     
     if (!submission) {
       return res.status(404).json({ success: false, error: 'Submission not found' });
     }
     
-    res.json({ success: true, submission });
+    submission.grade = grade;
+    submission.marks = marks;
+    submission.feedback = feedback;
+    submission.gradedBy = gradedBy;
+    submission.gradedByName = gradedByName;
+    submission.gradedAt = new Date();
+    submission.status = 'graded';
+    
+    await submission.save();
+    
+    // Create blockchain record for grading
+    const blockchainRecord = await createBlockchainRecord('grade', submission._id, {
+      submissionId: submission._id,
+      studentName: submission.studentName,
+      grade,
+      marks,
+      gradedBy: gradedByName,
+      gradedAt: submission.gradedAt,
+      assignmentTitle: submission.assignmentTemplate.title
+    });
+    
+    await logActivity(gradedBy, gradedByName, 'Assignment Graded', `Graded assignment: ${submission.assignmentTemplate.title} - Grade: ${grade}`, 'grade', submission._id, req.ip, {
+      studentName: submission.studentName,
+      assignmentTitle: submission.assignmentTemplate.title,
+      grade,
+      marks,
+      blockchainHash: blockchainRecord.dataHash
+    });
+    
+    res.json({
+      success: true,
+      message: 'Assignment graded successfully',
+      submission,
+      blockchainHash: blockchainRecord.dataHash
+    });
+    
   } catch (error) {
-    console.error('Error fetching submission:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch submission details' });
+    console.error('Grading error:', error);
+    res.status(500).json({ success: false, error: 'Failed to grade submission' });
   }
 });
 
-// Download assignment file
-app.get('/api/assignments/download/:submissionId', async (req, res) => {
+// Blockchain verification endpoint
+app.post('/api/blockchain/verify', async (req, res) => {
+  try {
+    const { recordId, recordType } = req.body;
+    
+    const blockchainRecord = await BlockchainRecord.findOne({ 
+      recordId, 
+      recordType 
+    });
+    
+    if (!blockchainRecord) {
+      return res.json({
+        success: false,
+        verified: false,
+        error: 'Blockchain record not found'
+      });
+    }
+    
+    // Verify chain integrity
+    const previousRecord = await BlockchainRecord.findOne({
+      blockNumber: blockchainRecord.blockNumber - 1
+    });
+    
+    const chainValid = !previousRecord || blockchainRecord.previousHash === previousRecord.dataHash;
+    
+    res.json({
+      success: true,
+      verified: chainValid,
+      blockchainRecord: {
+        dataHash: blockchainRecord.dataHash,
+        blockNumber: blockchainRecord.blockNumber,
+        timestamp: blockchainRecord.timestamp,
+        merkleRoot: blockchainRecord.merkleRoot,
+        verified: blockchainRecord.verified
+      },
+      chainIntegrity: chainValid
+    });
+    
+  } catch (error) {
+    console.error('Blockchain verification error:', error);
+    res.status(500).json({ success: false, error: 'Verification failed' });
+  }
+});
+
+// Get blockchain records for transparency
+app.get('/api/blockchain/records', async (req, res) => {
+  try {
+    const records = await BlockchainRecord.find({})
+      .sort({ blockNumber: -1 })
+      .limit(100);
+    
+    res.json({ success: true, records });
+  } catch (error) {
+    console.error('Error fetching blockchain records:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch blockchain records' });
+  }
+});
+
+// Get users (admin only)
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Get audit logs
+app.get('/api/audit', async (req, res) => {
+  try {
+    const auditLogs = await AuditLog.find()
+      .populate('userId', 'name role')
+      .sort({ timestamp: -1 })
+      .limit(1000);
+    res.json({ success: true, auditLogs });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Download submission file
+app.get('/api/submissions/download/:submissionId', async (req, res) => {
   try {
     const { submissionId } = req.params;
-    const submission = await Assignment.findById(submissionId);
+    const submission = await Submission.findById(submissionId);
     
     if (!submission || !fs.existsSync(submission.filePath)) {
       return res.status(404).json({ success: false, error: 'File not found' });
@@ -286,180 +646,6 @@ app.get('/api/assignments/download/:submissionId', async (req, res) => {
   } catch (error) {
     console.error('Download error:', error);
     res.status(500).json({ success: false, error: 'Failed to download file' });
-  }
-});
-
-// Get all assignments
-app.get('/api/assignments/all', async (req, res) => {
-  try {
-    const assignments = await Assignment.find({})
-      .sort({ submittedAt: -1 })
-      .select('-filePath');
-    
-    res.json({ success: true, assignments });
-  } catch (error) {
-    console.error('Error fetching all assignments:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch assignments' });
-  }
-});
-
-// Grade assignment
-app.put('/api/assignments/grade/:submissionId', async (req, res) => {
-  try {
-    const { submissionId } = req.params;
-    const { grade, feedback, gradedBy } = req.body;
-    
-    const updatedAssignment = await Assignment.findByIdAndUpdate(
-      submissionId,
-      {
-        grade,
-        feedback,
-        gradedBy,
-        gradedAt: new Date(),
-        status: 'graded'
-      },
-      { new: true }
-    ).select('-filePath');
-    
-    if (!updatedAssignment) {
-      return res.status(404).json({ success: false, error: 'Assignment not found' });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Assignment graded successfully',
-      assignment: updatedAssignment
-    });
-    
-  } catch (error) {
-    console.error('Grading error:', error);
-    res.status(500).json({ success: false, error: 'Failed to grade assignment' });
-  }
-});
-
-// Get all users
-app.get('/api/users', async (req, res) => {
-  try {
-    const users = await User.find().select('-password');
-    res.json({ success: true, users });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// Update user
-app.put('/api/users/:id', async (req, res) => {
-  try {
-    const { name, email, role } = req.body;
-    const user = await User.findById(req.params.id);
-    
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    user.name = name;
-    user.email = email;
-    user.role = role;
-    await user.save();
-
-    await AuditLog.create({
-      user: 'Admin',
-      action: 'User Updated',
-      details: `User updated: ${user.username}`,
-      ipAddress: req.ip
-    });
-
-    res.json({ 
-      success: true, 
-      user: {
-        id: user._id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        role: user.role
-      }
-    });
-
-  } catch (error) {
-    console.error('Update user error:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// Get assignments
-app.get('/api/assignments', async (req, res) => {
-  try {
-    const assignments = await Assignment.find()
-      .sort({ submittedAt: -1 })
-      .select('-filePath');
-    
-    res.json({ success: true, assignments });
-  } catch (error) {
-    console.error('Error fetching assignments:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// Get audit logs
-app.get('/api/audit', async (req, res) => {
-  try {
-    const auditLogs = await AuditLog.find().sort({ timestamp: -1 }).limit(1000);
-    res.json({ success: true, auditLogs });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// Debug endpoints (remove in production)
-app.get('/api/debug', async (req, res) => {
-  try {
-    const mongoStatus = mongoose.connection.readyState;
-    const mongoStates = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
-    
-    const userCount = await User.countDocuments();
-    const assignmentCount = await Assignment.countDocuments();
-    const auditCount = await AuditLog.countDocuments();
-    const testUsers = await User.find().select('username role');
-
-    res.json({
-      mongodb: { status: mongoStates[mongoStatus] || 'unknown' },
-      collections: { users: userCount, assignments: assignmentCount, auditLogs: auditCount },
-      testUsers
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message, mongodb: 'connection failed' });
-  }
-});
-
-app.post('/api/manual-seed', async (req, res) => {
-  try {
-    await User.deleteMany({});
-    await Assignment.deleteMany({});
-    await AuditLog.deleteMany({});
-    
-    const initialUsers = [
-      { username: 'admin', email: 'admin@educhain.com', password: 'password123', name: 'System Administrator', role: 'admin' },
-      { username: 'lecturer', email: 'lecturer@educhain.com', password: 'password123', name: 'Dr. Jane Smith', role: 'lecturer' },
-      { username: 'student', email: 'student@educhain.com', password: 'password123', name: 'John Student', role: 'student' }
-    ];
-
-    const createdUsers = await User.insertMany(initialUsers);
-    
-    await AuditLog.create({
-      user: 'System',
-      action: 'Manual Database Seed',
-      details: 'Database manually seeded with initial users',
-      ipAddress: req.ip || 'localhost'
-    });
-
-    res.json({ 
-      success: true, 
-      message: 'Database seeded successfully',
-      users: createdUsers.map(u => ({ username: u.username, role: u.role }))
-    });
-  } catch (error) {
-    console.error('Manual seed error:', error);
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
