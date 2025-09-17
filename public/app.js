@@ -1337,19 +1337,23 @@ function generateBlockchainRecordsHTML() {
     const sortedRecords = [...blockchainRecords].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     
     sortedRecords.slice(0, 20).forEach(record => {
+        // Fix: Add null check and provide default value for record.type
+        const recordType = record.type || 'unknown';
+        const displayType = recordType.replace('_', ' ').toUpperCase();
+        
         recordsHTML += `
             <div class="blockchain-record">
                 <div class="record-header">
-                    <span class="record-type">${record.type.replace('_', ' ').toUpperCase()}</span>
+                    <span class="record-type">${displayType}</span>
                     <span class="record-timestamp">${new Date(record.timestamp).toLocaleString()}</span>
                 </div>
                 <div class="record-details">
                     <p><strong>Hash:</strong> <code class="blockchain-hash" onclick="copyToClipboard('${record.hash}')">${record.hash}</code></p>
-                    <p><strong>Description:</strong> ${record.description}</p>
+                    <p><strong>Description:</strong> ${record.description || 'No description available'}</p>
                     ${record.userId ? `<p><strong>User ID:</strong> ${record.userId}</p>` : ''}
                 </div>
                 <div class="record-actions">
-                    <button class="btn btn-sm btn-secondary" onclick="verifyBlockchainRecord('${record.recordId}', '${record.type}')">Verify</button>
+                    <button class="btn btn-sm btn-secondary" onclick="verifyBlockchainRecord('${record.recordId}', '${recordType}')">Verify</button>
                     <button class="btn btn-sm btn-outline" onclick="copyToClipboard('${record.hash}')">Copy Hash</button>
                 </div>
             </div>
