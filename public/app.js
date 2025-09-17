@@ -709,60 +709,7 @@ async function handleCreateAssignment(e) {
     }
 }
 
-// Enhanced apiCall function with better error handling and debugging
-async function apiCall(endpoint, options = {}) {
-    const defaultOptions = {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': currentUser ? `Bearer ${currentUser.token}` : ''
-        }
-    };
-    
-    const finalOptions = { ...defaultOptions, ...options };
-    
-    try {
-        console.log('API Call:', endpoint, finalOptions); // Debug log
-        
-        const response = await fetch(endpoint, finalOptions);
-        
-        console.log('API Response Status:', response.status, response.statusText); // Debug log
-        
-        // Check if response is ok
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        // Check content type before parsing JSON
-        const contentType = response.headers.get('content-type');
-        console.log('Content-Type:', contentType); // Debug log
-        
-        if (!contentType || !contentType.includes('application/json')) {
-            // If not JSON, get text to see what was returned
-            const text = await response.text();
-            console.error('Non-JSON response:', text.substring(0, 500)); // Show first 500 chars
-            throw new Error(`Expected JSON but got ${contentType || 'unknown content type'}`);
-        }
-        
-        const result = await response.json();
-        console.log('API Result:', result); // Debug log
-        
-        return result;
-    } catch (error) {
-        console.error('API call failed:', error);
-        
-        // More specific error messages
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            throw new Error('Network error: Cannot connect to server. Check if server is running.');
-        } else if (error.message.includes('Unexpected token')) {
-            throw new Error('Server returned HTML instead of JSON. Check API endpoint exists.');
-        } else {
-            throw error;
-        }
-    }
-}
-
-// Updated showManageAssignments with better error handling and fallback endpoints
+// Updated showManageAssignments function with MongoDB integration
 async function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
@@ -775,84 +722,28 @@ async function showManageAssignments() {
             </div>
         `;
         
-        let myAssignments = [];
-        let allSubmissions = [];
+        // Fetch assignments created by current lecturer from MongoDB
+        const assignmentsResult = await apiCall(`/api/assignments/lecturer/${currentUser.id}`, {
+            method: 'GET'
+        });
         
-        // Try multiple endpoint patterns in order of preference
-        const endpointsToTry = [
-            `/api/assignments/lecturer/${currentUser.id}`,
-            `/api/assignments/templates?createdBy=${currentUser.id}`,
-            `/api/assignments/templates`,  // Fallback: get all and filter client-side
-            `/api/assignments`  // Most basic fallback
-        ];
-        
-        let assignmentsLoaded = false;
-        
-        for (const endpoint of endpointsToTry) {
-            try {
-                console.log(`Trying endpoint: ${endpoint}`);
-                
-                const assignmentsResult = await apiCall(endpoint);
-                
-                if (assignmentsResult.success) {
-                    const allAssignments = assignmentsResult.assignments || 
-                                         assignmentsResult.templates || 
-                                         assignmentsResult.data || [];
-                    
-                    // Filter for current lecturer's assignments
-                    myAssignments = allAssignments.filter(a => 
-                        a.createdBy === currentUser.id || 
-                        a.createdBy === currentUser.id.toString() ||
-                        a.lecturer === currentUser.id ||
-                        a.lecturer === currentUser.id.toString()
-                    );
-                    
-                    assignmentsLoaded = true;
-                    console.log(`Successfully loaded ${myAssignments.length} assignments from ${endpoint}`);
-                    break;
-                } else {
-                    console.log(`Endpoint ${endpoint} returned success: false`);
-                }
-            } catch (error) {
-                console.log(`Endpoint ${endpoint} failed:`, error.message);
-                continue; // Try next endpoint
-            }
+        if (!assignmentsResult.success) {
+            throw new Error(assignmentsResult.error || 'Failed to fetch assignments');
         }
         
-        if (!assignmentsLoaded) {
-            throw new Error('All API endpoints failed. Server may be down or endpoints not implemented.');
-        }
+        const myAssignments = assignmentsResult.assignments || assignmentsResult.data || [];
         
-        // Try to load submissions (optional - won't fail if this doesn't work)
-        try {
-            const submissionsEndpoints = [
-                `/api/submissions/lecturer/${currentUser.id}`,
-                `/api/submissions/all`,
-                `/api/submissions`
-            ];
-            
-            for (const endpoint of submissionsEndpoints) {
-                try {
-                    const submissionsResult = await apiCall(endpoint);
-                    if (submissionsResult.success) {
-                        allSubmissions = submissionsResult.submissions || 
-                                       submissionsResult.data || [];
-                        console.log(`Loaded ${allSubmissions.length} submissions from ${endpoint}`);
-                        break;
-                    }
-                } catch (error) {
-                    console.log(`Submissions endpoint ${endpoint} failed:`, error.message);
-                    continue;
-                }
-            }
-        } catch (error) {
-            console.log('Could not load submissions, continuing without them');
-            allSubmissions = []; // Use empty array if submissions can't be loaded
-        }
+        // Also fetch submission counts for each assignment
+        const submissionsResult = await apiCall(`/api/submissions/lecturer/${currentUser.id}`, {
+            method: 'GET'
+        });
+        
+        const allSubmissions = submissionsResult.success ? 
+            (submissionsResult.submissions || submissionsResult.data || []) : [];
         
         // Update local state with fresh data from MongoDB
         assignmentTemplates = assignmentTemplates.filter(a => a.createdBy !== currentUser.id).concat(myAssignments);
-        if (allSubmissions.length > 0) {
+        if (submissionsResult.success) {
             submissions = allSubmissions;
         }
         
@@ -862,7 +753,6 @@ async function showManageAssignments() {
                 <div class="no-assignments">
                     <p>You haven't created any assignments yet.</p>
                     <button class="btn btn-primary" onclick="showDashboardSection('create-assignment')">Create First Assignment</button>
-                    <p class="debug-info">Connected to database successfully, but no assignments found for user ID: ${currentUser.id}</p>
                 </div>
             `;
             return;
@@ -885,8 +775,7 @@ async function showManageAssignments() {
             // Count submissions for this assignment from MongoDB data
             const assignmentSubmissions = allSubmissions.filter(s => 
                 (s.assignmentTemplate && s.assignmentTemplate._id === assignment._id) ||
-                s.assignmentTemplateId === assignment._id ||
-                s.assignmentId === assignment._id
+                s.assignmentTemplateId === assignment._id
             );
             
             const gradedCount = assignmentSubmissions.filter(s => s.grade || s.marks).length;
@@ -912,7 +801,9 @@ async function showManageAssignments() {
                         <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">
                             View Submissions (${assignmentSubmissions.length})
                         </button>
+                        <button class="btn btn-secondary btn-sm" onclick="editAssignment('${assignment._id}')">Edit</button>
                         ${assignment.blockchainHash ? `<button class="btn btn-secondary btn-sm" onclick="verifyBlockchainRecord('${assignment._id}', 'assignment_template')" title="Verify on blockchain">Verify</button>` : ''}
+                        <button class="btn btn-danger btn-sm" onclick="deleteAssignment('${assignment._id}')" title="Delete assignment">Delete</button>
                     </div>
                 </div>
             `;
@@ -930,68 +821,114 @@ async function showManageAssignments() {
         // Fallback to local data if available
         const localAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
         
-        content.innerHTML = `
-            <h3>My Assignments</h3>
-            <div class="error-state">
-                <h4>Database Connection Error</h4>
-                <p><strong>Error:</strong> ${error.message}</p>
-                <div class="debug-info">
-                    <details>
-                        <summary>Debug Information</summary>
-                        <p><strong>Current User ID:</strong> ${currentUser.id}</p>
-                        <p><strong>API Base:</strong> Check if your server is running</p>
-                        <p><strong>Expected Endpoints:</strong></p>
-                        <ul>
-                            <li>/api/assignments/lecturer/${currentUser.id}</li>
-                            <li>/api/assignments/templates</li>
-                            <li>/api/submissions/lecturer/${currentUser.id}</li>
-                        </ul>
-                        <p><strong>Common Solutions:</strong></p>
-                        <ol>
-                            <li>Make sure your backend server is running</li>
-                            <li>Check if the API endpoints exist in your backend</li>
-                            <li>Verify the server is running on the correct port</li>
-                            <li>Check for CORS issues</li>
-                        </ol>
-                    </details>
+        if (localAssignments.length > 0) {
+            showMessage('Using cached data - database connection failed', 'warning');
+            
+            // Show local data as fallback
+            let fallbackHTML = `
+                <h3>My Assignments (Cached)</h3>
+                <div class="error-notice">
+                    <p><strong>Warning:</strong> Could not connect to database. Showing cached data.</p>
+                    <button class="btn btn-secondary" onclick="refreshManageAssignments()">Retry</button>
                 </div>
-                <div class="error-actions">
-                    <button class="btn btn-primary" onclick="refreshManageAssignments()">Retry Connection</button>
-                    <button class="btn btn-secondary" onclick="showDashboardSection('create-assignment')">Create New Assignment</button>
-                    <button class="btn btn-outline" onclick="testApiConnection()">Test API Connection</button>
-                </div>
-            </div>
-        `;
-        
-        showMessage('Failed to connect to database - check console for details', 'error');
-    }
-}
-
-// Helper function to test API connection
-async function testApiConnection() {
-    try {
-        showMessage('Testing API connection...', 'info');
-        
-        // Test basic connectivity
-        const response = await fetch('/api/health', { method: 'GET' });
-        const contentType = response.headers.get('content-type');
-        
-        if (response.ok && contentType && contentType.includes('application/json')) {
-            const result = await response.json();
-            showMessage('API connection successful!', 'success');
-            console.log('API Health Check:', result);
+                <div class="assignments-grid">
+            `;
+            
+            localAssignments.forEach(assignment => {
+                const dueDate = new Date(assignment.dueDate);
+                const isOverdue = dueDate < new Date();
+                const dueDateClass = isOverdue ? 'overdue' : '';
+                const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate && s.assignmentTemplate._id === assignment._id);
+                
+                fallbackHTML += `
+                    <div class="assignment-card">
+                        <div class="assignment-header">
+                            <h4>${assignment.title}</h4>
+                            <span class="course-badge">${assignment.courseCode}</span>
+                        </div>
+                        <div class="assignment-details">
+                            <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
+                            <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
+                            <p><strong>Submissions:</strong> ${assignmentSubmissions.length}</p>
+                            <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade).length}</p>
+                        </div>
+                        <div class="assignment-actions">
+                            <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">View Submissions</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            fallbackHTML += '</div>';
+            content.innerHTML = fallbackHTML;
         } else {
-            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            content.innerHTML = `
+                <h3>My Assignments</h3>
+                <div class="error-state">
+                    <p><strong>Error:</strong> Could not load assignments from database.</p>
+                    <p>Error: ${error.message}</p>
+                    <button class="btn btn-primary" onclick="refreshManageAssignments()">Retry</button>
+                    <button class="btn btn-secondary" onclick="showDashboardSection('create-assignment')">Create New Assignment</button>
+                </div>
+            `;
+            showMessage('Failed to load assignments from database', 'error');
         }
-    } catch (error) {
-        console.error('API connection test failed:', error);
-        showMessage('API connection failed: ' + error.message, 'error');
     }
 }
 
 // Helper function to refresh the assignments view
 async function refreshManageAssignments() {
     await showManageAssignments();
+}
+
+// Additional function to edit an assignment
+async function editAssignment(assignmentId) {
+    try {
+        const assignment = assignmentTemplates.find(a => a._id === assignmentId);
+        if (!assignment) {
+            // Fetch from database if not in local cache
+            const result = await apiCall(`/api/assignments/${assignmentId}`);
+            if (!result.success) {
+                throw new Error('Assignment not found');
+            }
+        }
+        
+        showMessage('Edit assignment functionality would be implemented here', 'info');
+        // You can implement the edit modal/form here
+        
+    } catch (error) {
+        console.error('Error editing assignment:', error);
+        showMessage('Failed to edit assignment', 'error');
+    }
+}
+
+// Additional function to delete an assignment
+async function deleteAssignment(assignmentId) {
+    if (!confirm('Are you sure you want to delete this assignment? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        showMessage('Deleting assignment...', 'info');
+        
+        const result = await apiCall(`/api/assignments/${assignmentId}`, {
+            method: 'DELETE'
+        });
+        
+        if (result.success) {
+            // Remove from local cache
+            assignmentTemplates = assignmentTemplates.filter(a => a._id !== assignmentId);
+            
+            showMessage('Assignment deleted successfully', 'success');
+            await refreshManageAssignments(); // Refresh the view
+        } else {
+            throw new Error(result.error || 'Failed to delete assignment');
+        }
+        
+    } catch (error) {
+        console.error('Error deleting assignment:', error);
+        showMessage('Failed to delete assignment: ' + error.message, 'error');
+    }
 }
 
 // Continue from where the code stopped - completing viewAssignmentSubmissions function
