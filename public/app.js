@@ -712,8 +712,9 @@ async function handleCreateAssignment(e) {
 function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
-const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === a._id)
-;    
+    // Fix: Properly declare myAssignments variable
+    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
+    
     if (myAssignments.length === 0) {
         content.innerHTML = `
             <h3>My Assignments</h3>
