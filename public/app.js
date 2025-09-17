@@ -158,6 +158,60 @@ async function loadUserData() {
             assignmentTemplates = templatesResult.templates || [];
         }
 
+        // NEW
+async function loadUserData() {
+    try {
+        // Load assignment templates - REFRESH THIS DATA
+        const templatesResult = await apiCall('/api/assignments/templates');
+        if (templatesResult.success) {
+            assignmentTemplates = templatesResult.templates || templatesResult.assignments || [];
+        }
+
+        // Load submissions based on role
+        if (currentUser.role === 'student') {
+            const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
+            if (submissionsResult.success) {
+                submissions = submissionsResult.submissions || [];
+            }
+        } else if (currentUser.role === 'lecturer') {
+            const submissionsResult = await apiCall('/api/submissions/all');
+            if (submissionsResult.success) {
+                submissions = submissionsResult.submissions || [];
+            }
+        }
+
+        // ... rest of the function remains the same
+    } catch (error) {
+        console.error('Error loading user data:', error);
+        showMessage('Some data could not be loaded from server.', 'warning');
+    }
+}
+
+async function refreshAssignmentData() {
+    try {
+        const templatesResult = await apiCall('/api/assignments/templates');
+        if (templatesResult.success) {
+            assignmentTemplates = templatesResult.templates || templatesResult.assignments || [];
+        }
+        
+        if (currentUser.role === 'lecturer') {
+            const submissionsResult = await apiCall('/api/submissions/all');
+            if (submissionsResult.success) {
+                submissions = submissionsResult.submissions || [];
+            }
+        } else if (currentUser.role === 'student') {
+            const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
+            if (submissionsResult.success) {
+                submissions = submissionsResult.submissions || [];
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing data:', error);
+    }
+}
+
+        // NEW END
+
         // Load submissions based on role
         if (currentUser.role === 'student') {
             const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
@@ -198,6 +252,8 @@ async function loadUserData() {
         showMessage('Some data could not be loaded from server.', 'warning');
     }
 }
+
+
 
 function logout() {
     currentUser = null;
@@ -502,8 +558,9 @@ async function handleSubmission(e) {
         const result = await response.json();
         
         if (result.success) {
+            // Add the returned submission (with MongoDB _id) to local array
+            submissions.push(result.submission);
             showMessage('Assignment submitted successfully! Blockchain hash: ' + result.submission.blockchainHash.substring(0, 16) + '...', 'success');
-            await loadUserData();
             showDashboardSection('submissions');
         } else {
             showMessage('Error: ' + result.error, 'error');
@@ -517,8 +574,7 @@ async function handleSubmission(e) {
 function showMySubmissions() {
     const content = document.getElementById('dashboardContent');
     
-    const mySubmissions = submissions.filter(s => s.studentId === currentUser.id);
-    
+const mySubmissions = submissions.filter(s => s.studentId === currentUser.id || s.student?.id === currentUser.id);    
     if (mySubmissions.length === 0) {
         content.innerHTML = `
             <h3>My Submissions</h3>
@@ -564,6 +620,10 @@ function showMySubmissions() {
     
     submissionsHTML += '</div>';
     content.innerHTML = submissionsHTML;
+}
+// SHOW NOTIFICTION
+function showNotification(message, type) {
+    showMessage(message, type);
 }
 
 // Lecturer Functions  
@@ -616,7 +676,7 @@ async function handleCreateAssignment(e) {
     e.preventDefault();
     
     const form = e.target;
-    const formData = {
+    const assignmentData = {
         title: form.title.value,
         courseCode: form.courseCode.value,
         description: form.description.value,
@@ -632,12 +692,13 @@ async function handleCreateAssignment(e) {
         
         const result = await apiCall('/api/assignments/template', {
             method: 'POST',
-            body: JSON.stringify(formData)
+            body: JSON.stringify(assignmentData)
         });
         
         if (result.success) {
+            // Add the returned assignment (with MongoDB _id) to local array
+            assignmentTemplates.push(result.assignment);
             showMessage('Assignment created successfully! Blockchain hash: ' + result.blockchainHash.substring(0, 16) + '...', 'success');
-            await loadUserData();
             showDashboardSection('manage-assignments');
         } else {
             showMessage('Error: ' + result.error, 'error');
@@ -651,8 +712,10 @@ async function handleCreateAssignment(e) {
 function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
-    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
-    
+const assignmentSubmissions = submissions.filter(s => 
+    (s.assignmentTemplate && s.assignmentTemplate._id === assignment._id) || 
+    s.assignmentTemplateId === assignment._id
+);    
     if (myAssignments.length === 0) {
         content.innerHTML = `
             <h3>My Assignments</h3>
@@ -1027,38 +1090,24 @@ async function submitGrade(event, submissionId) {
         });
         
         if (result.success) {
-            // Update local data
+            // Update local data with MongoDB response
             const submissionIndex = submissions.findIndex(s => s._id === submissionId);
             if (submissionIndex !== -1) {
-                submissions[submissionIndex].marks = marks;
-                submissions[submissionIndex].grade = marks;
-                submissions[submissionIndex].feedback = feedback;
-                submissions[submissionIndex].status = 'graded';
-                submissions[submissionIndex].gradedAt = new Date().toISOString();
+                submissions[submissionIndex] = result.submission; // Use the updated submission from server
             }
             
             closeModal();
             showMessage('Grade saved successfully! Blockchain hash: ' + (result.blockchainHash ? result.blockchainHash.substring(0, 16) + '...' : 'N/A'), 'success');
-            showDashboardSection('grade-submissions'); // Refresh the view
+            
+            // Refresh the current view
+            await refreshAssignmentData();
+            showDashboardSection('grade-submissions');
         } else {
             showMessage('Error saving grade: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Grading error:', error);
-        
-        // Fallback to local update for demo
-        const submissionIndex = submissions.findIndex(s => s._id === submissionId);
-        if (submissionIndex !== -1) {
-            submissions[submissionIndex].marks = marks;
-            submissions[submissionIndex].grade = marks;
-            submissions[submissionIndex].feedback = feedback;
-            submissions[submissionIndex].status = 'graded';
-            submissions[submissionIndex].gradedAt = new Date().toISOString();
-        }
-        
-        closeModal();
-        showMessage('Grade saved successfully! (Local mode)', 'success');
-        showDashboardSection('grade-submissions');
+        showMessage('Failed to save grade. Please try again.', 'error');
     }
 }
 
