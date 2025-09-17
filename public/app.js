@@ -709,58 +709,226 @@ async function handleCreateAssignment(e) {
     }
 }
 
-function showManageAssignments() {
+// Updated showManageAssignments function with MongoDB integration
+async function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
-    // Fix: Properly declare myAssignments variable
-    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
-    
-    if (myAssignments.length === 0) {
+    try {
+        // Show loading state
         content.innerHTML = `
             <h3>My Assignments</h3>
-            <div class="no-assignments">
-                <p>You haven't created any assignments yet.</p>
-                <button class="btn btn-primary" onclick="showDashboardSection('create-assignment')">Create First Assignment</button>
+            <div class="loading-state">
+                <p>Loading your assignments...</p>
             </div>
         `;
+        
+        // Fetch assignments created by current lecturer from MongoDB
+        const assignmentsResult = await apiCall(`/api/assignments/lecturer/${currentUser.id}`, {
+            method: 'GET'
+        });
+        
+        if (!assignmentsResult.success) {
+            throw new Error(assignmentsResult.error || 'Failed to fetch assignments');
+        }
+        
+        const myAssignments = assignmentsResult.assignments || assignmentsResult.data || [];
+        
+        // Also fetch submission counts for each assignment
+        const submissionsResult = await apiCall(`/api/submissions/lecturer/${currentUser.id}`, {
+            method: 'GET'
+        });
+        
+        const allSubmissions = submissionsResult.success ? 
+            (submissionsResult.submissions || submissionsResult.data || []) : [];
+        
+        // Update local state with fresh data from MongoDB
+        assignmentTemplates = assignmentTemplates.filter(a => a.createdBy !== currentUser.id).concat(myAssignments);
+        if (submissionsResult.success) {
+            submissions = allSubmissions;
+        }
+        
+        if (myAssignments.length === 0) {
+            content.innerHTML = `
+                <h3>My Assignments</h3>
+                <div class="no-assignments">
+                    <p>You haven't created any assignments yet.</p>
+                    <button class="btn btn-primary" onclick="showDashboardSection('create-assignment')">Create First Assignment</button>
+                </div>
+            `;
+            return;
+        }
+        
+        let assignmentsHTML = `
+            <h3>My Assignments</h3>
+            <div class="assignments-actions">
+                <button class="btn btn-primary" onclick="showDashboardSection('create-assignment')">Create New Assignment</button>
+                <button class="btn btn-secondary" onclick="refreshManageAssignments()">Refresh</button>
+            </div>
+            <div class="assignments-grid">
+        `;
+        
+        myAssignments.forEach(assignment => {
+            const dueDate = new Date(assignment.dueDate);
+            const isOverdue = dueDate < new Date();
+            const dueDateClass = isOverdue ? 'overdue' : '';
+            
+            // Count submissions for this assignment from MongoDB data
+            const assignmentSubmissions = allSubmissions.filter(s => 
+                (s.assignmentTemplate && s.assignmentTemplate._id === assignment._id) ||
+                s.assignmentTemplateId === assignment._id
+            );
+            
+            const gradedCount = assignmentSubmissions.filter(s => s.grade || s.marks).length;
+            const createdDate = assignment.createdAt ? new Date(assignment.createdAt).toLocaleDateString() : 'N/A';
+            
+            assignmentsHTML += `
+                <div class="assignment-card" data-assignment-id="${assignment._id}">
+                    <div class="assignment-header">
+                        <h4>${assignment.title}</h4>
+                        <span class="course-badge">${assignment.courseCode}</span>
+                    </div>
+                    <div class="assignment-details">
+                        <p><strong>Description:</strong> ${assignment.description || 'No description'}</p>
+                        <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
+                        <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
+                        <p><strong>Submissions:</strong> <span class="submission-count">${assignmentSubmissions.length}</span></p>
+                        <p><strong>Graded:</strong> <span class="graded-count">${gradedCount}</span></p>
+                        <p><strong>Pending:</strong> <span class="pending-count">${assignmentSubmissions.length - gradedCount}</span></p>
+                        <p><strong>Created:</strong> ${createdDate}</p>
+                        ${assignment.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.7em;word-break:break-all;background:#f0f0f0;padding:2px;border-radius:2px;cursor:pointer;" onclick="copyToClipboard('${assignment.blockchainHash}')" title="Click to copy">${assignment.blockchainHash.substring(0, 16)}...</code></p>` : ''}
+                    </div>
+                    <div class="assignment-actions">
+                        <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">
+                            View Submissions (${assignmentSubmissions.length})
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="editAssignment('${assignment._id}')">Edit</button>
+                        ${assignment.blockchainHash ? `<button class="btn btn-secondary btn-sm" onclick="verifyBlockchainRecord('${assignment._id}', 'assignment_template')" title="Verify on blockchain">Verify</button>` : ''}
+                        <button class="btn btn-danger btn-sm" onclick="deleteAssignment('${assignment._id}')" title="Delete assignment">Delete</button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        assignmentsHTML += '</div>';
+        content.innerHTML = assignmentsHTML;
+        
+        // Show success message with data freshness
+        showMessage(`Loaded ${myAssignments.length} assignments from database`, 'success');
+        
+    } catch (error) {
+        console.error('Error loading assignments from MongoDB:', error);
+        
+        // Fallback to local data if available
+        const localAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
+        
+        if (localAssignments.length > 0) {
+            showMessage('Using cached data - database connection failed', 'warning');
+            
+            // Show local data as fallback
+            let fallbackHTML = `
+                <h3>My Assignments (Cached)</h3>
+                <div class="error-notice">
+                    <p><strong>Warning:</strong> Could not connect to database. Showing cached data.</p>
+                    <button class="btn btn-secondary" onclick="refreshManageAssignments()">Retry</button>
+                </div>
+                <div class="assignments-grid">
+            `;
+            
+            localAssignments.forEach(assignment => {
+                const dueDate = new Date(assignment.dueDate);
+                const isOverdue = dueDate < new Date();
+                const dueDateClass = isOverdue ? 'overdue' : '';
+                const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate && s.assignmentTemplate._id === assignment._id);
+                
+                fallbackHTML += `
+                    <div class="assignment-card">
+                        <div class="assignment-header">
+                            <h4>${assignment.title}</h4>
+                            <span class="course-badge">${assignment.courseCode}</span>
+                        </div>
+                        <div class="assignment-details">
+                            <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
+                            <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
+                            <p><strong>Submissions:</strong> ${assignmentSubmissions.length}</p>
+                            <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade).length}</p>
+                        </div>
+                        <div class="assignment-actions">
+                            <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">View Submissions</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            fallbackHTML += '</div>';
+            content.innerHTML = fallbackHTML;
+        } else {
+            content.innerHTML = `
+                <h3>My Assignments</h3>
+                <div class="error-state">
+                    <p><strong>Error:</strong> Could not load assignments from database.</p>
+                    <p>Error: ${error.message}</p>
+                    <button class="btn btn-primary" onclick="refreshManageAssignments()">Retry</button>
+                    <button class="btn btn-secondary" onclick="showDashboardSection('create-assignment')">Create New Assignment</button>
+                </div>
+            `;
+            showMessage('Failed to load assignments from database', 'error');
+        }
+    }
+}
+
+// Helper function to refresh the assignments view
+async function refreshManageAssignments() {
+    await showManageAssignments();
+}
+
+// Additional function to edit an assignment
+async function editAssignment(assignmentId) {
+    try {
+        const assignment = assignmentTemplates.find(a => a._id === assignmentId);
+        if (!assignment) {
+            // Fetch from database if not in local cache
+            const result = await apiCall(`/api/assignments/${assignmentId}`);
+            if (!result.success) {
+                throw new Error('Assignment not found');
+            }
+        }
+        
+        showMessage('Edit assignment functionality would be implemented here', 'info');
+        // You can implement the edit modal/form here
+        
+    } catch (error) {
+        console.error('Error editing assignment:', error);
+        showMessage('Failed to edit assignment', 'error');
+    }
+}
+
+// Additional function to delete an assignment
+async function deleteAssignment(assignmentId) {
+    if (!confirm('Are you sure you want to delete this assignment? This action cannot be undone.')) {
         return;
     }
     
-    let assignmentsHTML = `
-        <h3>My Assignments</h3>
-        <div class="assignments-grid">
-    `;
-    
-    myAssignments.forEach(assignment => {
-        const dueDate = new Date(assignment.dueDate);
-        const isOverdue = dueDate < new Date();
-        const dueDateClass = isOverdue ? 'overdue' : '';
-        const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === assignment._id);
+    try {
+        showMessage('Deleting assignment...', 'info');
         
-        assignmentsHTML += `
-            <div class="assignment-card">
-                <div class="assignment-header">
-                    <h4>${assignment.title}</h4>
-                    <span class="course-badge">${assignment.courseCode}</span>
-                </div>
-                <div class="assignment-details">
-                    <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
-                    <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
-                    <p><strong>Submissions:</strong> ${assignmentSubmissions.length}</p>
-                    <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade).length}</p>
-                    <p><strong>Created:</strong> ${new Date(assignment.createdAt).toLocaleDateString()}</p>
-                    ${assignment.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.7em;word-break:break-all;background:#f0f0f0;padding:2px;border-radius:2px;cursor:pointer;" onclick="copyToClipboard('${assignment.blockchainHash}')">${assignment.blockchainHash}</code></p>` : ''}
-                </div>
-                <div class="assignment-actions">
-                    <button class="btn btn-primary btn-sm" onclick="viewAssignmentSubmissions('${assignment._id}')">View Submissions</button>
-                    ${assignment.blockchainHash ? `<button class="btn btn-secondary btn-sm" onclick="verifyBlockchainRecord('${assignment._id}', 'assignment_template')">Verify Blockchain</button>` : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    assignmentsHTML += '</div>';
-    content.innerHTML = assignmentsHTML;
+        const result = await apiCall(`/api/assignments/${assignmentId}`, {
+            method: 'DELETE'
+        });
+        
+        if (result.success) {
+            // Remove from local cache
+            assignmentTemplates = assignmentTemplates.filter(a => a._id !== assignmentId);
+            
+            showMessage('Assignment deleted successfully', 'success');
+            await refreshManageAssignments(); // Refresh the view
+        } else {
+            throw new Error(result.error || 'Failed to delete assignment');
+        }
+        
+    } catch (error) {
+        console.error('Error deleting assignment:', error);
+        showMessage('Failed to delete assignment: ' + error.message, 'error');
+    }
 }
 
 // Continue from where the code stopped - completing viewAssignmentSubmissions function
