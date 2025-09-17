@@ -712,10 +712,8 @@ async function handleCreateAssignment(e) {
 function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
-const assignmentSubmissions = submissions.filter(s => 
-    (s.assignmentTemplate && s.assignmentTemplate._id === assignment._id) || 
-    s.assignmentTemplateId === assignment._id
-);    
+const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === a._id)
+;    
     if (myAssignments.length === 0) {
         content.innerHTML = `
             <h3>My Assignments</h3>
