@@ -135,93 +135,29 @@ async function login(event) {
         console.error('Login error:', error);
         showMessage('Login failed, using demo mode.', 'warning');
         
-        const user = users.find(u => u.username === username && u.password === password && u.role === role);
-        
-        if (user) {
-            currentUser = user;
-            document.getElementById('signinBtn').classList.add('hidden');
-            document.getElementById('logoutBtn').classList.remove('hidden');
-            
-            showDashboard();
-            showMessage('Welcome, ' + user.name + '! (Demo Mode)', 'success');
-        } else {
-            showMessage('Invalid credentials. Please try: admin/password123', 'error');
-        }
+      
     }
 }
 
 async function loadUserData() {
     try {
-        // Load assignment templates
+        // Load assignment templates for ALL users
         const templatesResult = await apiCall('/api/assignments/templates');
         if (templatesResult.success) {
-            assignmentTemplates = templatesResult.templates || [];
-        }
-
-        // NEW
-async function loadUserData() {
-    try {
-        // Load assignment templates - REFRESH THIS DATA
-        const templatesResult = await apiCall('/api/assignments/templates');
-        if (templatesResult.success) {
-            assignmentTemplates = templatesResult.templates || templatesResult.assignments || [];
+            assignmentTemplates = templatesResult.data || templatesResult.templates || templatesResult.assignments || [];
         }
 
         // Load submissions based on role
         if (currentUser.role === 'student') {
             const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
             if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || [];
+                submissions = submissionsResult.data || submissionsResult.submissions || [];
             }
         } else if (currentUser.role === 'lecturer') {
+            // Load ALL submissions for lecturers to see their students' work
             const submissionsResult = await apiCall('/api/submissions/all');
             if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || [];
-            }
-        }
-
-        // ... rest of the function remains the same
-    } catch (error) {
-        console.error('Error loading user data:', error);
-        showMessage('Some data could not be loaded from server.', 'warning');
-    }
-}
-
-async function refreshAssignmentData() {
-    try {
-        const templatesResult = await apiCall('/api/assignments/templates');
-        if (templatesResult.success) {
-            assignmentTemplates = templatesResult.templates || templatesResult.assignments || [];
-        }
-        
-        if (currentUser.role === 'lecturer') {
-            const submissionsResult = await apiCall('/api/submissions/all');
-            if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || [];
-            }
-        } else if (currentUser.role === 'student') {
-            const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
-            if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || [];
-            }
-        }
-    } catch (error) {
-        console.error('Error refreshing data:', error);
-    }
-}
-
-        // NEW END
-
-        // Load submissions based on role
-        if (currentUser.role === 'student') {
-            const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
-            if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || [];
-            }
-        } else if (currentUser.role === 'lecturer') {
-            const submissionsResult = await apiCall('/api/submissions/all');
-            if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || [];
+                submissions = submissionsResult.data || submissionsResult.submissions || [];
             }
         }
 
@@ -229,7 +165,7 @@ async function refreshAssignmentData() {
         if (currentUser.role === 'admin') {
             const userResult = await apiCall('/api/users');
             if (userResult.success) {
-                users = userResult.users || [];
+                users = userResult.data || userResult.users || [];
             }
         }
 
@@ -237,14 +173,14 @@ async function refreshAssignmentData() {
         if (currentUser.role === 'admin') {
             const auditResult = await apiCall('/api/audit');
             if (auditResult.success) {
-                auditLog = auditResult.auditLogs || [];
+                auditLog = auditResult.data || auditResult.auditLogs || [];
             }
         }
 
-        // Load blockchain records for transparency
+        // Load blockchain records for ALL users
         const blockchainResult = await apiCall('/api/blockchain/records');
         if (blockchainResult.success) {
-            blockchainRecords = blockchainResult.records || [];
+            blockchainRecords = blockchainResult.data || blockchainResult.records || [];
         }
 
     } catch (error) {
@@ -253,6 +189,18 @@ async function refreshAssignmentData() {
     }
 }
 
+async function refreshDashboard() {
+    await loadUserData();
+    // Re-render current section
+    const activeBtn = document.querySelector('.dashboard-btn.active');
+    if (activeBtn) {
+        const section = activeBtn.textContent.toLowerCase();
+        if (section.includes('manage')) showDashboardSection('manage-assignments');
+        else if (section.includes('grade')) showDashboardSection('grade-submissions');
+        else if (section.includes('available')) showDashboardSection('assignments');
+        else if (section.includes('submissions')) showDashboardSection('submissions');
+    }
+}
 
 
 function logout() {
@@ -557,14 +505,14 @@ async function handleSubmission(e) {
         
         const result = await response.json();
         
-        if (result.success) {
-            // Add the returned submission (with MongoDB _id) to local array
-            submissions.push(result.submission);
-            showMessage('Assignment submitted successfully! Blockchain hash: ' + result.submission.blockchainHash.substring(0, 16) + '...', 'success');
-            showDashboardSection('submissions');
-        } else {
-            showMessage('Error: ' + result.error, 'error');
-        }
+      if (result.success) {
+    // Refresh data from database instead of just adding locally
+    await loadUserData();
+    showMessage('Assignment submitted successfully! Blockchain hash: ' + (result.submission?.blockchainHash ? result.submission.blockchainHash.substring(0, 16) + '...' : 'Submitted'), 'success');
+    showDashboardSection('submissions');
+} else {
+    showMessage('Error: ' + result.error, 'error');
+}
     } catch (error) {
         console.error('Submission error:', error);
         showMessage('Failed to submit assignment. Please try again.', 'error');
@@ -695,14 +643,14 @@ async function handleCreateAssignment(e) {
             body: JSON.stringify(assignmentData)
         });
         
-        if (result.success) {
-            // Add the returned assignment (with MongoDB _id) to local array
-            assignmentTemplates.push(result.assignment);
-            showMessage('Assignment created successfully! Blockchain hash: ' + result.blockchainHash.substring(0, 16) + '...', 'success');
-            showDashboardSection('manage-assignments');
-        } else {
-            showMessage('Error: ' + result.error, 'error');
-        }
+      if (result.success) {
+    // Refresh data from database instead of just adding locally
+    await loadUserData();
+    showMessage('Assignment created successfully! Blockchain hash: ' + (result.blockchainHash ? result.blockchainHash.substring(0, 16) + '...' : 'Created'), 'success');
+    showDashboardSection('manage-assignments');
+} else {
+    showMessage('Error: ' + result.error, 'error');
+}
     } catch (error) {
         console.error('Assignment creation error:', error);
         showMessage('Failed to create assignment. Please try again.', 'error');
@@ -1089,17 +1037,10 @@ async function submitGrade(event, submissionId) {
         });
         
         if (result.success) {
-            // Update local data with MongoDB response
-            const submissionIndex = submissions.findIndex(s => s._id === submissionId);
-            if (submissionIndex !== -1) {
-                submissions[submissionIndex] = result.submission; // Use the updated submission from server
-            }
-            
             closeModal();
-            showMessage('Grade saved successfully! Blockchain hash: ' + (result.blockchainHash ? result.blockchainHash.substring(0, 16) + '...' : 'N/A'), 'success');
-            
-            // Refresh the current view
-            await refreshAssignmentData();
+            // Refresh all data from database
+            await loadUserData();
+            showMessage('Grade saved successfully! Blockchain hash: ' + (result.blockchainHash ? result.blockchainHash.substring(0, 16) + '...' : 'Saved'), 'success');
             showDashboardSection('grade-submissions');
         } else {
             showMessage('Error saving grade: ' + result.error, 'error');
@@ -1567,32 +1508,46 @@ async function verifyBlockchainRecord(recordId, type) {
     try {
         showMessage('Verifying blockchain record...', 'info');
         
-        let record;
+        // Get the hash from the record
+        let hash;
         if (type === 'assignment_template') {
-            record = assignmentTemplates.find(a => a._id === recordId);
+            const record = assignmentTemplates.find(a => a._id === recordId);
+            hash = record?.blockchainHash;
         } else if (type === 'submission') {
-            record = submissions.find(s => s._id === recordId);
+            const record = submissions.find(s => s._id === recordId);
+            hash = record?.blockchainHash;
         } else {
-            record = blockchainRecords.find(r => r.recordId === recordId);
+            const record = blockchainRecords.find(r => r._id === recordId);
+            hash = record?.hash;
         }
         
-        if (record && record.blockchainHash) {
-            const result = await apiCall('/api/blockchain/verify', {
-                method: 'POST',
-                body: JSON.stringify({ hash: record.blockchainHash })
-            });
-            
-            if (result.success) {
-                showMessage('✅ Blockchain verification successful!', 'success');
+        if (!hash) {
+            showMessage('No blockchain hash found for this record', 'error');
+            return;
+        }
+        
+        // Call your backend verification endpoint
+        const result = await apiCall('/api/blockchain/verify', {
+            method: 'POST',
+            body: JSON.stringify({ 
+                hash: hash,
+                recordId: recordId,
+                type: type
+            })
+        });
+        
+        if (result.success) {
+            if (result.verified) {
+                showMessage('✅ Blockchain verification successful! Record is authentic.', 'success');
             } else {
-                showMessage('❌ Blockchain verification failed', 'error');
+                showMessage('❌ Blockchain verification failed! Record may be tampered with.', 'error');
             }
         } else {
-            showMessage('✅ Record verified in local blockchain (Demo mode)', 'success');
+            showMessage('Verification error: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Blockchain verification error:', error);
-        showMessage('✅ Record verified in local blockchain (Demo mode)', 'success');
+        showMessage('Verification service unavailable. Please try again later.', 'error');
     }
 }
 

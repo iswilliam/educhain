@@ -360,6 +360,60 @@ app.post('/api/assignments/template', async (req, res) => {
   }
 });
 
+// Add after your existing routes
+app.post('/api/blockchain/verify', async (req, res) => {
+    try {
+        const { hash, recordId, type } = req.body;
+        
+        // First, verify the record exists in database
+        let dbRecord;
+        if (type === 'assignment_template') {
+            dbRecord = await AssignmentTemplate.findById(recordId);
+        } else if (type === 'submission') {
+            dbRecord = await Submission.findById(recordId);
+        }
+        
+        if (!dbRecord || dbRecord.blockchainHash !== hash) {
+            return res.json({ success: false, error: 'Record not found or hash mismatch' });
+        }
+        
+        // Verify on Sepolia testnet
+        const Web3 = require('web3');
+        const web3 = new Web3('https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID');
+        
+        try {
+            // Check if transaction exists on blockchain
+            const transaction = await web3.eth.getTransaction(hash);
+            
+            if (transaction && transaction.blockNumber) {
+                res.json({ 
+                    success: true, 
+                    verified: true,
+                    blockNumber: transaction.blockNumber,
+                    timestamp: transaction.timestamp
+                });
+            } else {
+                res.json({ 
+                    success: true, 
+                    verified: false,
+                    error: 'Transaction not found on blockchain'
+                });
+            }
+        } catch (blockchainError) {
+            console.error('Blockchain verification error:', blockchainError);
+            res.json({ 
+                success: true, 
+                verified: false,
+                error: 'Blockchain verification failed'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Verification error:', error);
+        res.json({ success: false, error: error.message });
+    }
+});
+
 // Get assignment templates (for students to view available assignments)
 app.get('/api/assignments/templates', async (req, res) => {
   try {
