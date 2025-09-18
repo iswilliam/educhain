@@ -322,7 +322,7 @@ app.post('/api/assignments/template', async (req, res) => {
       instructions,
       dueDate: new Date(dueDate),
       maxMarks: maxMarks || 100,
-      createdBy: new mongoose.Types.ObjectId(createdBy), // Fix: Convert to ObjectId
+      createdBy: new mongoose.Types.ObjectId(createdBy), // This line is correct
       createdByName
     });
     
@@ -350,7 +350,7 @@ app.post('/api/assignments/template', async (req, res) => {
     res.json({
       success: true,
       message: 'Assignment template created successfully',
-      assignment: assignmentTemplate,
+      assignment: assignmentTemplate, // This returns the created assignment
       blockchainHash: blockchainRecord.dataHash
     });
     
@@ -451,7 +451,7 @@ app.get('/api/assignments/templates', async (req, res) => {
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
     
-    res.json({ success: true, templates });
+    res.json({ success: true, templates }); // Changed from 'assignments' to 'templates'
   } catch (error) {
     console.error('Error fetching assignment templates:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch assignment templates' });
@@ -482,8 +482,8 @@ app.post('/api/assignments/submit', upload.single('assignmentFile'), async (req,
     const status = now > template.dueDate ? 'late' : 'submitted';
     
     const submission = new Submission({
-      assignmentTemplate: assignmentTemplateId,
-      studentId,
+      assignmentTemplate: new mongoose.Types.ObjectId(assignmentTemplateId), // Ensure ObjectId
+      studentId: new mongoose.Types.ObjectId(studentId), // Ensure ObjectId
       studentName,
       fileName: req.file.filename,
       filePath: req.file.path,
@@ -549,7 +549,12 @@ app.get('/api/submissions/student/:studentId', async (req, res) => {
   try {
     const { studentId } = req.params;
     
-    const submissions = await Submission.find({ studentId })
+    const submissions = await Submission.find({ 
+      $or: [
+        { studentId: studentId },
+        { studentId: new mongoose.Types.ObjectId(studentId) } // Handle both string and ObjectId
+      ]
+    })
       .populate('assignmentTemplate', 'title courseCode dueDate maxMarks')
       .sort({ submittedAt: -1 })
       .select('-filePath');
@@ -565,8 +570,8 @@ app.get('/api/submissions/student/:studentId', async (req, res) => {
 app.get('/api/submissions/all', async (req, res) => {
   try {
     const submissions = await Submission.find({})
-      .populate('assignmentTemplate', 'title courseCode dueDate maxMarks createdByName')
-      .populate('studentId', 'name email')
+      .populate('assignmentTemplate', 'title courseCode dueDate maxMarks createdBy createdByName')
+      .populate('studentId', 'name email username') // Added username
       .sort({ submittedAt: -1 })
       .select('-filePath');
     

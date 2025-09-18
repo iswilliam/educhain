@@ -142,20 +142,20 @@ async function loadUserData() {
         // Load assignment templates for ALL users
         const templatesResult = await apiCall('/api/assignments/templates');
         if (templatesResult.success) {
-            assignmentTemplates = templatesResult.data || templatesResult.templates || templatesResult.assignments || [];
+            assignmentTemplates = templatesResult.templates || []; // Fix: Use 'templates' not 'data'
         }
 
         // Load submissions based on role
-        if (currentUser.role === 'student') {
+         if (currentUser.role === 'student') {
             const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
             if (submissionsResult.success) {
-                submissions = submissionsResult.data || submissionsResult.submissions || [];
+                submissions = submissionsResult.submissions || []; // Fix: Use 'submissions' not 'data'
             }
-        } else if (currentUser.role === 'lecturer') {
+         } else if (currentUser.role === 'lecturer') {
             // Load ALL submissions for lecturers to see their students' work
             const submissionsResult = await apiCall('/api/submissions/all');
             if (submissionsResult.success) {
-                submissions = submissionsResult.data || submissionsResult.submissions || [];
+                submissions = submissionsResult.submissions || []; // Fix: Use 'submissions' not 'data'
             }
         }
 
@@ -163,7 +163,7 @@ async function loadUserData() {
         if (currentUser.role === 'admin') {
             const userResult = await apiCall('/api/users');
             if (userResult.success) {
-                users = userResult.data || userResult.users || [];
+                users = userResult.users || []; // Fix: Use 'users' not 'data'
             }
         }
 
@@ -171,14 +171,14 @@ async function loadUserData() {
         if (currentUser.role === 'admin') {
             const auditResult = await apiCall('/api/audit');
             if (auditResult.success) {
-                auditLog = auditResult.data || auditResult.auditLogs || [];
+                auditLog = auditResult.auditLogs || []; // Fix: Use 'auditLogs' not 'data'
             }
         }
 
         // Load blockchain records for ALL users
         const blockchainResult = await apiCall('/api/blockchain/records');
         if (blockchainResult.success) {
-            blockchainRecords = blockchainResult.data || blockchainResult.records || [];
+            blockchainRecords = blockchainResult.records || []; // Fix: Use 'records' not 'data'
         }
 
     } catch (error) {
@@ -520,7 +520,14 @@ async function handleSubmission(e) {
 function showMySubmissions() {
     const content = document.getElementById('dashboardContent');
     
-const mySubmissions = submissions.filter(s => s.studentId === currentUser.id || s.student?.id === currentUser.id);    
+    // Fix: Handle both possible data structures
+    const mySubmissions = submissions.filter(s => {
+        // Handle both direct studentId match and nested student object
+        return s.studentId === currentUser.id || 
+               s.studentId?.toString() === currentUser.id?.toString() ||
+               (s.student && (s.student.id === currentUser.id || s.student._id === currentUser.id));
+    });
+    
     if (mySubmissions.length === 0) {
         content.innerHTML = `
             <h3>My Submissions</h3>
@@ -541,18 +548,24 @@ const mySubmissions = submissions.filter(s => s.studentId === currentUser.id || 
         const statusClass = getStatusClass(submission.status);
         const submissionDate = new Date(submission.submittedAt).toLocaleDateString();
         
+        // Fix: Handle nested assignmentTemplate structure
+        const assignmentTitle = submission.assignmentTemplate?.title || 'Unknown Assignment';
+        const courseCode = submission.assignmentTemplate?.courseCode || 'N/A';
+        const dueDate = submission.assignmentTemplate?.dueDate || new Date();
+        const maxMarks = submission.assignmentTemplate?.maxMarks || 100;
+        
         submissionsHTML += `
             <div class="submission-card">
                 <div class="submission-header">
-                    <h4>${submission.assignmentTemplate.title}</h4>
+                    <h4>${assignmentTitle}</h4>
                     <span class="status ${statusClass}">${submission.status}</span>
                 </div>
                 <div class="submission-details">
-                    <p><strong>Course:</strong> ${submission.assignmentTemplate.courseCode}</p>
+                    <p><strong>Course:</strong> ${courseCode}</p>
                     <p><strong>Submitted:</strong> ${submissionDate}</p>
-                    <p><strong>Due Date:</strong> ${new Date(submission.assignmentTemplate.dueDate).toLocaleDateString()}</p>
-                    ${submission.grade ? `<p><strong>Grade:</strong> ${submission.grade}</p>` : ''}
-                    ${submission.marks ? `<p><strong>Marks:</strong> ${submission.marks}/${submission.assignmentTemplate.maxMarks}</p>` : ''}
+                    <p><strong>Due Date:</strong> ${new Date(dueDate).toLocaleDateString()}</p>
+                    ${submission.grade || submission.marks ? `<p><strong>Grade:</strong> ${submission.marks || submission.grade}</p>` : ''}
+                    ${submission.marks || submission.grade ? `<p><strong>Marks:</strong> ${submission.marks || submission.grade}/${maxMarks}</p>` : ''}
                     ${submission.feedback ? `<p><strong>Feedback:</strong> ${submission.feedback}</p>` : ''}
                     ${submission.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.7em;word-break:break-all;background:#f0f0f0;padding:2px;border-radius:2px;cursor:pointer;" onclick="copyToClipboard('${submission.blockchainHash}')">${submission.blockchainHash}</code></p>` : ''}
                 </div>
@@ -658,11 +671,13 @@ async function handleCreateAssignment(e) {
 function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
-    // Fix: Properly declare myAssignments variable
-const myAssignments = assignmentTemplates.filter(a => 
-    a.createdBy === currentUser.id || 
-    a.createdBy.toString() === currentUser.id.toString()
-);    
+    // Fix: Handle both string and ObjectId comparisons for createdBy field
+    const myAssignments = assignmentTemplates.filter(a => {
+        return a.createdBy === currentUser.id || 
+               a.createdBy?.toString() === currentUser.id?.toString() ||
+               (typeof a.createdBy === 'object' && a.createdBy._id === currentUser.id);
+    });
+    
     if (myAssignments.length === 0) {
         content.innerHTML = `
             <h3>My Assignments</h3>
@@ -683,7 +698,13 @@ const myAssignments = assignmentTemplates.filter(a =>
         const dueDate = new Date(assignment.dueDate);
         const isOverdue = dueDate < new Date();
         const dueDateClass = isOverdue ? 'overdue' : '';
-        const assignmentSubmissions = submissions.filter(s => s.assignmentTemplate._id === assignment._id);
+        
+        // Fix: Handle assignmentTemplate reference properly
+        const assignmentSubmissions = submissions.filter(s => {
+            return s.assignmentTemplate && 
+                   (s.assignmentTemplate._id === assignment._id || 
+                    s.assignmentTemplate._id?.toString() === assignment._id?.toString());
+        });
         
         assignmentsHTML += `
             <div class="assignment-card">
@@ -695,7 +716,7 @@ const myAssignments = assignmentTemplates.filter(a =>
                     <p><strong>Due Date:</strong> <span class="${dueDateClass}">${dueDate.toLocaleDateString()}</span></p>
                     <p><strong>Max Marks:</strong> ${assignment.maxMarks}</p>
                     <p><strong>Submissions:</strong> ${assignmentSubmissions.length}</p>
-                    <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade).length}</p>
+                    <p><strong>Graded:</strong> ${assignmentSubmissions.filter(s => s.grade || s.marks).length}</p>
                     <p><strong>Created:</strong> ${new Date(assignment.createdAt).toLocaleDateString()}</p>
                     ${assignment.blockchainHash ? `<p><strong>Blockchain Hash:</strong> <code style="font-size:0.7em;word-break:break-all;background:#f0f0f0;padding:2px;border-radius:2px;cursor:pointer;" onclick="copyToClipboard('${assignment.blockchainHash}')">${assignment.blockchainHash}</code></p>` : ''}
                 </div>
@@ -899,12 +920,20 @@ function showSubmissionTab(tab) {
 function showGradeSubmissions() {
     const content = document.getElementById('dashboardContent');
     
-    // Get all submissions for assignments created by current lecturer
-    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
-   const myAssignmentIds = myAssignments.map(a => a._id.toString());
-   const pendingSubmissions = submissions.filter(s => 
-    myAssignmentIds.includes(s.assignmentTemplate._id.toString()) && !s.grade && !s.marks
-);
+    // Fix: Get all submissions for assignments created by current lecturer
+    const myAssignments = assignmentTemplates.filter(a => {
+        return a.createdBy === currentUser.id || 
+               a.createdBy?.toString() === currentUser.id?.toString() ||
+               (typeof a.createdBy === 'object' && a.createdBy._id === currentUser.id);
+    });
+    
+    const myAssignmentIds = myAssignments.map(a => a._id?.toString() || a._id);
+    
+    // Fix: Filter submissions more accurately
+    const pendingSubmissions = submissions.filter(s => {
+        const assignmentId = s.assignmentTemplate?._id?.toString() || s.assignmentTemplate?.toString();
+        return myAssignmentIds.includes(assignmentId) && !s.grade && !s.marks;
+    });
     
     if (pendingSubmissions.length === 0) {
         content.innerHTML = `
@@ -924,8 +953,20 @@ function showGradeSubmissions() {
     `;
     
     pendingSubmissions.forEach(submission => {
-        const assignment = assignmentTemplates.find(a => a._id === submission.assignmentTemplate._id);
-        const student = users.find(u => u.id === submission.studentId) || { name: submission.studentName || 'Unknown Student' };
+        // Fix: Find assignment properly
+        const assignment = assignmentTemplates.find(a => {
+            const submissionAssignmentId = submission.assignmentTemplate?._id?.toString() || submission.assignmentTemplate?.toString();
+            return a._id?.toString() === submissionAssignmentId || a._id === submissionAssignmentId;
+        });
+        
+        // Fix: Handle student data properly
+        const student = users.find(u => {
+            return u.id === submission.studentId || 
+                   u._id === submission.studentId ||
+                   u.id?.toString() === submission.studentId?.toString();
+        }) || { name: submission.studentName || 'Unknown Student' };
+        
+        if (!assignment) return; // Skip if assignment not found
         
         gradingHTML += `
             <div class="grading-card">
