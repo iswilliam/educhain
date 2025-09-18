@@ -322,7 +322,7 @@ app.post('/api/assignments/template', async (req, res) => {
       instructions,
       dueDate: new Date(dueDate),
       maxMarks: maxMarks || 100,
-      createdBy,
+      createdBy: new mongoose.Types.ObjectId(createdBy), // Fix: Convert to ObjectId
       createdByName
     });
     
@@ -362,56 +362,86 @@ app.post('/api/assignments/template', async (req, res) => {
 
 // Add after your existing routes
 app.post('/api/blockchain/verify', async (req, res) => {
-    try {
-        const { hash, recordId, type } = req.body;
-        
-        // First, verify the record exists in database
-        let dbRecord;
-        if (type === 'assignment_template') {
-            dbRecord = await AssignmentTemplate.findById(recordId);
-        } else if (type === 'submission') {
-            dbRecord = await Submission.findById(recordId);
-        }
-        
-        if (!dbRecord || dbRecord.blockchainHash !== hash) {
-            return res.json({ success: false, error: 'Record not found or hash mismatch' });
-        }
-        
-        // Verify on Sepolia testnet
-        const Web3 = require('web3');
-        const web3 = new Web3('https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432');
-        
-        try {
-            // Check if transaction exists on blockchain
-            const transaction = await web3.eth.getTransaction(hash);
-            
-            if (transaction && transaction.blockNumber) {
-                res.json({ 
-                    success: true, 
-                    verified: true,
-                    blockNumber: transaction.blockNumber,
-                    timestamp: transaction.timestamp
-                });
-            } else {
-                res.json({ 
-                    success: true, 
-                    verified: false,
-                    error: 'Transaction not found on blockchain'
-                });
-            }
-        } catch (blockchainError) {
-            console.error('Blockchain verification error:', blockchainError);
-            res.json({ 
-                success: true, 
-                verified: false,
-                error: 'Blockchain verification failed'
-            });
-        }
-        
-    } catch (error) {
-        console.error('Verification error:', error);
-        res.json({ success: false, error: error.message });
+  try {
+    const { hash, recordId, type } = req.body;
+    
+    // First, verify the record exists in database
+    let dbRecord;
+    if (type === 'assignment_template') {
+      dbRecord = await AssignmentTemplate.findById(recordId);
+    } else if (type === 'submission') {
+      dbRecord = await Submission.findById(recordId);
+    } else {
+      dbRecord = await BlockchainRecord.findOne({ dataHash: hash });
     }
+    
+    if (!dbRecord) {
+      return res.json({ success: false, error: 'Record not found in database' });
+    }
+    
+    // Verify hash matches
+    const recordHash = dbRecord.blockchainHash || dbRecord.dataHash || hash;
+    if (recordHash !== hash) {
+      return res.json({ success: false, error: 'Hash mismatch - record may be tampered' });
+    }
+    
+    // Find corresponding blockchain record
+    const blockchainRecord = await BlockchainRecord.findOne({ 
+      $or: [
+        { recordId: recordId },
+        { dataHash: hash }
+      ]
+    });
+    
+    if (!blockchainRecord) {
+      return res.json({ success: false, error: 'Blockchain record not found' });
+    }
+    
+    // Verify chain integrity
+    let chainValid = true;
+    if (blockchainRecord.blockNumber > 1) {
+      const previousRecord = await BlockchainRecord.findOne({
+        blockNumber: blockchainRecord.blockNumber - 1
+      });
+      
+      if (!previousRecord || blockchainRecord.previousHash !== previousRecord.dataHash) {
+        chainValid = false;
+      }
+    }
+    
+    // Try Ethereum Sepolia verification
+    let ethereumVerified = false;
+    try {
+      const Web3 = require('web3');
+      const web3 = new Web3('https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432');
+      
+      // Check if it's a valid transaction hash format
+      if (hash.length === 66 && hash.startsWith('0x')) {
+        const transaction = await web3.eth.getTransaction(hash);
+        ethereumVerified = !!(transaction && transaction.blockNumber);
+      }
+    } catch (ethError) {
+      console.log('Ethereum verification failed:', ethError.message);
+    }
+    
+    res.json({
+      success: true,
+      verified: chainValid,
+      ethereumVerified,
+      blockchainRecord: {
+        dataHash: blockchainRecord.dataHash,
+        blockNumber: blockchainRecord.blockNumber,
+        timestamp: blockchainRecord.timestamp,
+        recordType: blockchainRecord.recordType,
+        verified: blockchainRecord.verified && chainValid
+      },
+      chainIntegrity: chainValid
+    });
+    
+  } catch (error) {
+    console.error('Verification error:', error);
+    res.status(500).json({ success: false, error: 'Verification failed: ' + error.message });
+  }
 });
 
 // Get assignment templates (for students to view available assignments)
@@ -548,10 +578,9 @@ app.get('/api/submissions/all', async (req, res) => {
 });
 
 // Grade submission (lecturers only)
-app.put('/api/submissions/grade/:submissionId', async (req, res) => {
+app.put('/api/submissions/grade', async (req, res) => {
   try {
-    const { submissionId } = req.params;
-    const { grade, marks, feedback, gradedBy, gradedByName } = req.body;
+    const { submissionId, marks, feedback, gradedBy } = req.body;
     
     const submission = await Submission.findById(submissionId)
       .populate('assignmentTemplate', 'title courseCode maxMarks');
@@ -559,12 +588,14 @@ app.put('/api/submissions/grade/:submissionId', async (req, res) => {
     if (!submission) {
       return res.status(404).json({ success: false, error: 'Submission not found' });
     }
+
+    const grader = await User.findById(gradedBy);
     
-    submission.grade = grade;
+    submission.grade = marks.toString();
     submission.marks = marks;
     submission.feedback = feedback;
-    submission.gradedBy = gradedBy;
-    submission.gradedByName = gradedByName;
+    submission.gradedBy = new mongoose.Types.ObjectId(gradedBy);
+    submission.gradedByName = grader ? grader.name : 'Unknown';
     submission.gradedAt = new Date();
     submission.status = 'graded';
     
@@ -574,17 +605,17 @@ app.put('/api/submissions/grade/:submissionId', async (req, res) => {
     const blockchainRecord = await createBlockchainRecord('grade', submission._id, {
       submissionId: submission._id,
       studentName: submission.studentName,
-      grade,
+      grade: marks,
       marks,
-      gradedBy: gradedByName,
+      gradedBy: grader.name,
       gradedAt: submission.gradedAt,
       assignmentTitle: submission.assignmentTemplate.title
     });
     
-    await logActivity(gradedBy, gradedByName, 'Assignment Graded', `Graded assignment: ${submission.assignmentTemplate.title} - Grade: ${grade}`, 'grade', submission._id, req.ip, {
+    await logActivity(gradedBy, grader.name, 'Assignment Graded', `Graded assignment: ${submission.assignmentTemplate.title} - Grade: ${marks}`, 'grade', submission._id, req.ip, {
       studentName: submission.studentName,
       assignmentTitle: submission.assignmentTemplate.title,
-      grade,
+      grade: marks,
       marks,
       blockchainHash: blockchainRecord.dataHash
     });
@@ -602,49 +633,7 @@ app.put('/api/submissions/grade/:submissionId', async (req, res) => {
   }
 });
 
-// Blockchain verification endpoint
-app.post('/api/blockchain/verify', async (req, res) => {
-  try {
-    const { recordId, recordType } = req.body;
-    
-    const blockchainRecord = await BlockchainRecord.findOne({ 
-      recordId, 
-      recordType 
-    });
-    
-    if (!blockchainRecord) {
-      return res.json({
-        success: false,
-        verified: false,
-        error: 'Blockchain record not found'
-      });
-    }
-    
-    // Verify chain integrity
-    const previousRecord = await BlockchainRecord.findOne({
-      blockNumber: blockchainRecord.blockNumber - 1
-    });
-    
-    const chainValid = !previousRecord || blockchainRecord.previousHash === previousRecord.dataHash;
-    
-    res.json({
-      success: true,
-      verified: chainValid,
-      blockchainRecord: {
-        dataHash: blockchainRecord.dataHash,
-        blockNumber: blockchainRecord.blockNumber,
-        timestamp: blockchainRecord.timestamp,
-        merkleRoot: blockchainRecord.merkleRoot,
-        verified: blockchainRecord.verified
-      },
-      chainIntegrity: chainValid
-    });
-    
-  } catch (error) {
-    console.error('Blockchain verification error:', error);
-    res.status(500).json({ success: false, error: 'Verification failed' });
-  }
-});
+
 
 // Get blockchain records for transparency
 app.get('/api/blockchain/records', async (req, res) => {

@@ -131,11 +131,9 @@ async function login(event) {
         } else {
             showMessage('Invalid credentials. Please check username and password.', 'error');
         }
-    } catch (error) {
+   } catch (error) {
         console.error('Login error:', error);
-        showMessage('Login failed, using demo mode.', 'warning');
-        
-      
+        showMessage('Login failed. Please check your connection and try again.', 'error');
     }
 }
 
@@ -661,8 +659,10 @@ function showManageAssignments() {
     const content = document.getElementById('dashboardContent');
     
     // Fix: Properly declare myAssignments variable
-    const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
-    
+const myAssignments = assignmentTemplates.filter(a => 
+    a.createdBy === currentUser.id || 
+    a.createdBy.toString() === currentUser.id.toString()
+);    
     if (myAssignments.length === 0) {
         content.innerHTML = `
             <h3>My Assignments</h3>
@@ -901,10 +901,10 @@ function showGradeSubmissions() {
     
     // Get all submissions for assignments created by current lecturer
     const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
-    const myAssignmentIds = myAssignments.map(a => a._id);
-    const pendingSubmissions = submissions.filter(s => 
-        myAssignmentIds.includes(s.assignmentTemplate._id) && !s.grade
-    );
+   const myAssignmentIds = myAssignments.map(a => a._id.toString());
+   const pendingSubmissions = submissions.filter(s => 
+    myAssignmentIds.includes(s.assignmentTemplate._id.toString()) && !s.grade && !s.marks
+);
     
     if (pendingSubmissions.length === 0) {
         content.innerHTML = `
@@ -1516,9 +1516,6 @@ async function verifyBlockchainRecord(recordId, type) {
         } else if (type === 'submission') {
             const record = submissions.find(s => s._id === recordId);
             hash = record?.blockchainHash;
-        } else {
-            const record = blockchainRecords.find(r => r._id === recordId);
-            hash = record?.hash;
         }
         
         if (!hash) {
@@ -1526,7 +1523,7 @@ async function verifyBlockchainRecord(recordId, type) {
             return;
         }
         
-        // Call your backend verification endpoint
+        // Call backend verification endpoint
         const result = await apiCall('/api/blockchain/verify', {
             method: 'POST',
             body: JSON.stringify({ 
@@ -1538,16 +1535,17 @@ async function verifyBlockchainRecord(recordId, type) {
         
         if (result.success) {
             if (result.verified) {
-                showMessage('✅ Blockchain verification successful! Record is authentic.', 'success');
+                const ethereumStatus = result.ethereumVerified ? ' (Ethereum verified)' : ' (Database verified)';
+                showMessage('✅ Blockchain verification successful!' + ethereumStatus, 'success');
             } else {
-                showMessage('❌ Blockchain verification failed! Record may be tampered with.', 'error');
+                showMessage('❌ Blockchain verification failed! Record integrity compromised.', 'error');
             }
         } else {
-            showMessage('Verification error: ' + result.error, 'error');
+            showMessage('❌ Verification failed: ' + result.error, 'error');
         }
     } catch (error) {
         console.error('Blockchain verification error:', error);
-        showMessage('Verification service unavailable. Please try again later.', 'error');
+        showMessage('❌ Verification service error: ' + error.message, 'error');
     }
 }
 
