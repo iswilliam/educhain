@@ -290,10 +290,13 @@ app.post('/api/auth/login', async (req, res) => {
     // Fix: Query the 'users' table properly
     const user = await User.findOne({ username: username.trim() });
     
-  await logActivity(null, username, 'Failed Login Attempt', `Invalid credentials for ${username}`, 'auth', null, req.ip, { 
-  attemptedUsername: username,
-  failureReason: 'invalid_credentials'
-}, req.get('User-Agent'));
+    if (!user || password !== user.password) {
+      await logActivity(null, username, 'Failed Login Attempt', `Invalid credentials for ${username}`, 'auth', null, req.ip, { 
+        attemptedUsername: username,
+        failureReason: 'invalid_credentials'
+      }, req.get('User-Agent'));
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
 
     if (walletAddress && walletAddress !== user.walletAddress) {
       user.walletAddress = walletAddress;
@@ -301,10 +304,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'auth', user._id, req.ip, { 
-  walletAddress,
-  loginMethod: 'username_password',
-  userRole: user.role
-}, req.get('User-Agent'));
+      walletAddress,
+      loginMethod: 'username_password',
+      userRole: user.role
+    }, req.get('User-Agent'));
 
     // Fix: Return user._id instead of user.id for MongoDB
     res.json({
