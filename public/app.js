@@ -523,23 +523,21 @@ function showOverview() {
             break;
     }
 
-    // Add this after the system status div, before the closing content.innerHTML
-'<div style="margin-top: 2rem;">' +
-'<h4>Account Settings</h4>' +
-'<button class="btn btn-secondary" onclick="showPasswordChangeModal()">Change Password</button>' +
-'</div>' ;
+  
     
-    content.innerHTML = '<h3>Dashboard Overview</h3>' +
-        stats +
-        '<div style="margin-top: 2rem;">' +
-        '<h4>System Status</h4>' +
-        '<p><strong>Database:</strong> Connected ✅</p>' +
-        '<p><strong>Wallet:</strong> ' + (walletConnected ? 'Connected ✅' : 'Disconnected ❌') + '</p>' +
-        '<p><strong>Blockchain:</strong> ' + (blockchainRecords.length > 0 ? 'Active ✅' : 'Inactive ❌') + '</p>' +
-        '<p><strong>User Role:</strong> ' + currentUser.role + '</p>' +
-        '</div>';
-
-        
+  content.innerHTML = '<h3>Dashboard Overview</h3>' +
+    stats +
+    '<div style="margin-top: 2rem;">' +
+    '<h4>System Status</h4>' +
+    '<p><strong>Database:</strong> Connected ✅</p>' +
+    '<p><strong>Wallet:</strong> ' + (walletConnected ? 'Connected ✅' : 'Disconnected ❌') + '</p>' +
+    '<p><strong>Blockchain:</strong> ' + (blockchainRecords.length > 0 ? 'Active ✅' : 'Inactive ❌') + '</p>' +
+    '<p><strong>User Role:</strong> ' + currentUser.role + '</p>' +
+    '</div>' +
+    '<div style="margin-top: 2rem;">' +
+    '<h4>Account Settings</h4>' +
+    '<button class="btn btn-secondary" onclick="showPasswordChangeModal()">Change Password</button>' +
+    '</div>';
 }
 
 // Student Functions
