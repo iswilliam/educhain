@@ -236,6 +236,96 @@ function showDashboard() {
     showDashboardSection('overview');
 }
 
+function showPasswordChangeModal() {
+    const modal = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal-content password-modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h3>Change Password</h3>
+                    <button onclick="closeModal()" class="close-btn">&times;</button>
+                </div>
+                
+                <div class="modal-body">
+                    <form onsubmit="handlePasswordChange(event)">
+                        <div class="form-group">
+                            <label for="currentPassword">Current Password:</label>
+                            <input type="password" id="currentPassword" name="currentPassword" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newPassword">New Password:</label>
+                            <input type="password" id="newPassword" name="newPassword" minlength="6" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm New Password:</label>
+                            <input type="password" id="confirmPassword" name="confirmPassword" minlength="6" required>
+                        </div>
+                        
+                        <div class="password-requirements">
+                            <small>Password must be at least 6 characters long</small>
+                        </div>
+                        
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal()" class="btn btn-outline">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Change Password</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modal);
+}
+
+async function handlePasswordChange(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const currentPassword = form.currentPassword.value;
+    const newPassword = form.newPassword.value;
+    const confirmPassword = form.confirmPassword.value;
+    
+    if (newPassword !== confirmPassword) {
+        showMessage('New passwords do not match', 'error');
+        return;
+    }
+    
+    if (newPassword.length < 6) {
+        showMessage('Password must be at least 6 characters long', 'error');
+        return;
+    }
+    
+    try {
+        showMessage('Changing password...', 'info');
+        
+        const result = await apiCall('/api/auth/change-password', {
+            method: 'PUT',
+            body: JSON.stringify({
+                userId: currentUser.id,
+                currentPassword: currentPassword,
+                newPassword: newPassword
+            })
+        });
+        
+        if (result.success) {
+            closeModal();
+            showMessage('Password changed successfully!', 'success');
+            // Refresh audit log if currently viewing it
+            if (document.querySelector('.audit-table')) {
+                await loadUserData();
+                showDashboardSection('audit');
+            }
+        } else {
+            showMessage('Error: ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('Password change error:', error);
+        showMessage('Failed to change password. Please try again.', 'error');
+    }
+}
+
 function setupDashboardNavigation() {
     const nav = document.getElementById('dashboardNav');
     let navItems = [];
@@ -433,6 +523,12 @@ function showOverview() {
             break;
     }
 
+    // Add this after the system status div, before the closing content.innerHTML
+'<div style="margin-top: 2rem;">' +
+'<h4>Account Settings</h4>' +
+'<button class="btn btn-secondary" onclick="showPasswordChangeModal()">Change Password</button>' +
+'</div>' ;
+    
     content.innerHTML = '<h3>Dashboard Overview</h3>' +
         stats +
         '<div style="margin-top: 2rem;">' +
@@ -442,6 +538,8 @@ function showOverview() {
         '<p><strong>Blockchain:</strong> ' + (blockchainRecords.length > 0 ? 'Active ✅' : 'Inactive ❌') + '</p>' +
         '<p><strong>User Role:</strong> ' + currentUser.role + '</p>' +
         '</div>';
+
+        
 }
 
 // Student Functions
@@ -1279,37 +1377,89 @@ function showAuditTrail() {
     
     let auditHTML = `
         <h3>Audit Trail</h3>
-        <div class="audit-filters">
-            <select id="auditTypeFilter" onchange="filterAuditLogs()">
-                <option value="all">All Actions</option>
-                <option value="login">Login</option>
-                <option value="assignment_created">Assignment Created</option>
-                <option value="submission">Submission</option>
-                <option value="grading">Grading</option>
-            </select>
-            <button class="btn btn-secondary" onclick="exportAuditLog()">Export Audit Log</button>
+        <div class="audit-controls">
+            <div class="audit-filters">
+                <select id="auditTypeFilter" onchange="filterAuditLogs()">
+                    <option value="all">All Actions</option>
+                    <option value="Login">Login</option>
+                    <option value="Password Changed">Password Changed</option>
+                    <option value="Assignment Template Created">Assignment Created</option>
+                    <option value="Assignment Submitted">Assignment Submitted</option>
+                    <option value="Assignment Graded">Assignment Graded</option>
+                    <option value="Failed Login Attempt">Failed Login</option>
+                </select>
+                <input type="date" id="auditDateFilter" onchange="filterAuditLogs()" placeholder="Filter by date">
+                <button class="btn btn-secondary" onclick="exportAuditLog()">Export Audit Log</button>
+            </div>
         </div>
-        <div class="audit-list">
+        
+        <div class="audit-table-container">
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                        <th>Resource Type</th>
+                        <th>IP Address</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
     `;
     
     // Sort audit log by timestamp (most recent first)
-    auditLog.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const sortedAuditLog = [...auditLog].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     
-    auditLog.forEach(record => {
+    sortedAuditLog.forEach(record => {
+        const timestamp = new Date(record.timestamp).toLocaleString();
+        const statusClass = getAuditStatusClass(record.action);
+        
         auditHTML += `
-            <div class="audit-record" data-type="${record.action}">
-                <div class="audit-timestamp">${new Date(record.timestamp).toLocaleString()}</div>
-                <div class="audit-details">
-                    <strong>${record.action.replace('_', ' ').toUpperCase()}</strong>
-                    <p>User: ${record.userName} (${record.userRole})</p>
-                    <p>${record.description}</p>
-                    ${record.blockchainHash ? `<p>Blockchain: <code>${record.blockchainHash}</code></p>` : ''}
-                </div>
-            </div>
+            <tr class="audit-row" data-action="${record.action}" data-date="${new Date(record.timestamp).toISOString().split('T')[0]}">
+                <td class="timestamp-cell" title="${timestamp}">${timestamp}</td>
+                <td class="user-cell">
+                    <div class="user-info">
+                        <span class="user-name">${record.user}</span>
+                        ${record.userId ? `<small class="user-id">ID: ${record.userId.toString().substring(0, 8)}</small>` : ''}
+                    </div>
+                </td>
+                <td class="action-cell">
+                    <span class="action-badge ${statusClass}">${record.action}</span>
+                </td>
+                <td class="details-cell" title="${record.details}">${record.details}</td>
+                <td class="resource-cell">${record.resourceType || 'N/A'}</td>
+                <td class="ip-cell">${record.ipAddress || 'N/A'}</td>
+                <td class="status-cell">
+                    ${record.blockchainHash ? 
+                        `<span class="blockchain-verified" title="Blockchain verified">🔗</span>` : 
+                        `<span class="status-normal">✓</span>`
+                    }
+                </td>
+            </tr>
         `;
     });
     
-    auditHTML += '</div>';
+    auditHTML += `
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="audit-stats">
+            <div class="stats-row">
+                <span><strong>Total Records:</strong> ${auditLog.length}</span>
+                <span><strong>Today:</strong> ${auditLog.filter(r => new Date(r.timestamp).toDateString() === new Date().toDateString()).length}</span>
+                <span><strong>This Week:</strong> ${auditLog.filter(r => {
+                    const recordDate = new Date(r.timestamp);
+                    const weekAgo = new Date();
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    return recordDate >= weekAgo;
+                }).length}</span>
+            </div>
+        </div>
+    `;
+    
     content.innerHTML = auditHTML;
 }
 
@@ -1450,6 +1600,14 @@ function getStatusClass(status) {
         case 'late': return 'status-late';
         default: return 'status-pending';
     }
+}
+
+function getAuditStatusClass(action) {
+    if (action.includes('Failed') || action.includes('Error')) return 'status-error';
+    if (action.includes('Login')) return 'status-success';
+    if (action.includes('Created') || action.includes('Submitted')) return 'status-info';
+    if (action.includes('Graded') || action.includes('Changed')) return 'status-warning';
+    return 'status-normal';
 }
 
 function copyToClipboard(text) {
@@ -1930,17 +2088,27 @@ function viewSubmissionDetail(submissionId) {
 }
 
 function filterAuditLogs() {
-    const filter = document.getElementById('auditTypeFilter').value;
-    const auditRecords = document.querySelectorAll('.audit-record');
+    const actionFilter = document.getElementById('auditTypeFilter').value;
+    const dateFilter = document.getElementById('auditDateFilter').value;
+    const auditRows = document.querySelectorAll('.audit-row');
     
-    auditRecords.forEach(record => {
-        const recordType = record.getAttribute('data-type');
+    auditRows.forEach(row => {
+        const rowAction = row.getAttribute('data-action');
+        const rowDate = row.getAttribute('data-date');
         
-        if (filter === 'all' || recordType === filter) {
-            record.style.display = 'block';
-        } else {
-            record.style.display = 'none';
+        let showRow = true;
+        
+        // Filter by action
+        if (actionFilter !== 'all' && !rowAction.includes(actionFilter)) {
+            showRow = false;
         }
+        
+        // Filter by date
+        if (dateFilter && rowDate !== dateFilter) {
+            showRow = false;
+        }
+        
+        row.style.display = showRow ? 'table-row' : 'none';
     });
 }
 

@@ -122,10 +122,12 @@ const auditLogSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   action: { type: String, required: true },
   details: { type: String, required: true },
-  resourceType: { type: String, enum: ['assignment_template', 'submission', 'user', 'grade', 'blockchain'] },
+  resourceType: { type: String, enum: ['assignment_template', 'submission', 'user', 'grade', 'blockchain', 'auth'] },
   resourceId: { type: mongoose.Schema.Types.ObjectId },
   timestamp: { type: Date, default: Date.now },
   ipAddress: { type: String },
+  userAgent: { type: String },
+  sessionId: { type: String },
   blockchainHash: { type: String },
   metadata: { type: mongoose.Schema.Types.Mixed }
 });
@@ -175,20 +177,26 @@ async function createBlockchainRecord(recordType, recordId, data) {
   return blockchainRecord;
 }
 
-async function logActivity(userId, userName, action, details, resourceType, resourceId, ipAddress, metadata = {}) {
-  const auditEntry = new AuditLog({
-    user: userName,
-    userId,
-    action,
-    details,
-    resourceType,
-    resourceId,
-    ipAddress,
-    metadata
-  });
-  
-  await auditEntry.save();
-  return auditEntry;
+async function logActivity(userId, userName, action, details, resourceType, resourceId, ipAddress, metadata = {}, userAgent = '', sessionId = '') {
+  try {
+    const auditEntry = new AuditLog({
+      user: userName,
+      userId,
+      action,
+      details,
+      resourceType,
+      resourceId,
+      ipAddress,
+      userAgent,
+      sessionId,
+      metadata
+    });
+    
+    await auditEntry.save();
+    return auditEntry;
+  } catch (error) {
+    console.error('Audit logging failed:', error);
+  }
 }
 
 // Database seeding
@@ -282,17 +290,21 @@ app.post('/api/auth/login', async (req, res) => {
     // Fix: Query the 'users' table properly
     const user = await User.findOne({ username: username.trim() });
     
-    if (!user || password !== user.password) {
-      await logActivity(null, username, 'Failed Login Attempt', `Invalid credentials for ${username}`, 'user', null, req.ip);
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
-    }
+  await logActivity(null, username, 'Failed Login Attempt', `Invalid credentials for ${username}`, 'auth', null, req.ip, { 
+  attemptedUsername: username,
+  failureReason: 'invalid_credentials'
+}, req.get('User-Agent'));
 
     if (walletAddress && walletAddress !== user.walletAddress) {
       user.walletAddress = walletAddress;
       await user.save();
     }
 
-    await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'user', user._id, req.ip, { walletAddress });
+    await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'auth', user._id, req.ip, { 
+  walletAddress,
+  loginMethod: 'username_password',
+  userRole: user.role
+}, req.get('User-Agent'));
 
     // Fix: Return user._id instead of user.id for MongoDB
     res.json({
@@ -308,6 +320,44 @@ app.post('/api/auth/login', async (req, res) => {
 
   } catch (error) {
     console.error('Login error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// Change password route
+app.put('/api/auth/change-password', async (req, res) => {
+  try {
+    const { userId, currentPassword, newPassword } = req.body;
+    
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'All fields required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
+    }
+
+    const user = await User.findById(userId);
+    
+    if (!user || currentPassword !== user.password) {
+      await logActivity(userId, 'Unknown User', 'Password Change Failed', 'Invalid current password', 'user', userId, req.ip, {}, req.get('User-Agent'));
+      return res.status(401).json({ success: false, error: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    await logActivity(user._id, user.name, 'Password Changed', 'User successfully changed password', 'user', user._id, req.ip, { 
+      securityAction: true 
+    }, req.get('User-Agent'));
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('Password change error:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
