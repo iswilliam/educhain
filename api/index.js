@@ -279,6 +279,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Username and password required' });
     }
 
+    // Fix: Query the 'users' table properly
     const user = await User.findOne({ username: username.trim() });
     
     if (!user || password !== user.password) {
@@ -293,10 +294,11 @@ app.post('/api/auth/login', async (req, res) => {
 
     await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'user', user._id, req.ip, { walletAddress });
 
+    // Fix: Return user._id instead of user.id for MongoDB
     res.json({
       success: true,
       user: {
-        id: user._id,
+        id: user._id.toString(), // Convert ObjectId to string for frontend
         username: user.username,
         name: user.name,
         role: user.role,
@@ -447,11 +449,32 @@ app.post('/api/blockchain/verify', async (req, res) => {
 // Get assignment templates (for students to view available assignments)
 app.get('/api/assignments/templates', async (req, res) => {
   try {
+    console.log('Fetching assignment templates...'); // Debug log
+    
     const templates = await AssignmentTemplate.find({ isActive: true })
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
     
-    res.json({ success: true, templates }); // Changed from 'assignments' to 'templates'
+    console.log(`Found ${templates.length} assignment templates`); // Debug log
+    
+    // Convert to frontend-friendly format
+    const templatesList = templates.map(template => ({
+      _id: template._id.toString(),
+      title: template.title,
+      description: template.description,
+      courseCode: template.courseCode,
+      instructions: template.instructions,
+      dueDate: template.dueDate,
+      maxMarks: template.maxMarks,
+      createdBy: template.createdBy._id.toString(), // Convert ObjectId to string
+      createdByName: template.createdByName,
+      createdAt: template.createdAt,
+      isActive: template.isActive,
+      blockchainHash: template.blockchainHash,
+      blockchainTx: template.blockchainTx
+    }));
+    
+    res.json({ success: true, templates: templatesList });
   } catch (error) {
     console.error('Error fetching assignment templates:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch assignment templates' });
@@ -548,20 +571,52 @@ app.post('/api/assignments/submit', upload.single('assignmentFile'), async (req,
 app.get('/api/submissions/student/:studentId', async (req, res) => {
   try {
     const { studentId } = req.params;
+    console.log(`Fetching submissions for student: ${studentId}`); // Debug log
     
     const submissions = await Submission.find({ 
       $or: [
         { studentId: studentId },
-        { studentId: new mongoose.Types.ObjectId(studentId) } // Handle both string and ObjectId
+        { studentId: new mongoose.Types.ObjectId(studentId) }
       ]
     })
       .populate('assignmentTemplate', 'title courseCode dueDate maxMarks')
       .sort({ submittedAt: -1 })
       .select('-filePath');
     
-    res.json({ success: true, submissions });
+    console.log(`Found ${submissions.length} submissions for student`); // Debug log
+    
+    // Convert to frontend-friendly format
+    const submissionsList = submissions.map(sub => ({
+      _id: sub._id.toString(),
+      assignmentTemplate: {
+        _id: sub.assignmentTemplate._id.toString(),
+        title: sub.assignmentTemplate.title,
+        courseCode: sub.assignmentTemplate.courseCode,
+        dueDate: sub.assignmentTemplate.dueDate,
+        maxMarks: sub.assignmentTemplate.maxMarks
+      },
+      studentId: sub.studentId.toString(),
+      studentName: sub.studentName,
+      fileName: sub.fileName,
+      originalName: sub.originalName,
+      fileSize: sub.fileSize,
+      fileHash: sub.fileHash,
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      grade: sub.grade,
+      marks: sub.marks,
+      feedback: sub.feedback,
+      gradedBy: sub.gradedBy?.toString(),
+      gradedByName: sub.gradedByName,
+      gradedAt: sub.gradedAt,
+      blockchainHash: sub.blockchainHash,
+      blockchainTx: sub.blockchainTx,
+      verificationHash: sub.verificationHash
+    }));
+    
+    res.json({ success: true, submissions: submissionsList });
   } catch (error) {
-    console.error('Error fetching submissions:', error);
+    console.error('Error fetching student submissions:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch submissions' });
   }
 });
@@ -569,13 +624,54 @@ app.get('/api/submissions/student/:studentId', async (req, res) => {
 // Get all submissions (for lecturers)
 app.get('/api/submissions/all', async (req, res) => {
   try {
+    console.log('Fetching all submissions...'); // Debug log
+    
     const submissions = await Submission.find({})
       .populate('assignmentTemplate', 'title courseCode dueDate maxMarks createdBy createdByName')
-      .populate('studentId', 'name email username') // Added username
+      .populate('studentId', 'name email username')
       .sort({ submittedAt: -1 })
       .select('-filePath');
     
-    res.json({ success: true, submissions });
+    console.log(`Found ${submissions.length} total submissions`); // Debug log
+    
+    // Convert to frontend-friendly format
+    const submissionsList = submissions.map(sub => ({
+      _id: sub._id.toString(),
+      assignmentTemplate: {
+        _id: sub.assignmentTemplate._id.toString(),
+        title: sub.assignmentTemplate.title,
+        courseCode: sub.assignmentTemplate.courseCode,
+        dueDate: sub.assignmentTemplate.dueDate,
+        maxMarks: sub.assignmentTemplate.maxMarks,
+        createdBy: sub.assignmentTemplate.createdBy?.toString(),
+        createdByName: sub.assignmentTemplate.createdByName
+      },
+      studentId: sub.studentId._id.toString(),
+      studentName: sub.studentName,
+      student: {
+        _id: sub.studentId._id.toString(),
+        name: sub.studentId.name,
+        email: sub.studentId.email,
+        username: sub.studentId.username
+      },
+      fileName: sub.fileName,
+      originalName: sub.originalName,
+      fileSize: sub.fileSize,
+      fileHash: sub.fileHash,
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      grade: sub.grade,
+      marks: sub.marks,
+      feedback: sub.feedback,
+      gradedBy: sub.gradedBy?.toString(),
+      gradedByName: sub.gradedByName,
+      gradedAt: sub.gradedAt,
+      blockchainHash: sub.blockchainHash,
+      blockchainTx: sub.blockchainTx,
+      verificationHash: sub.verificationHash
+    }));
+    
+    res.json({ success: true, submissions: submissionsList });
   } catch (error) {
     console.error('Error fetching all submissions:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch submissions' });
@@ -657,10 +753,26 @@ app.get('/api/blockchain/records', async (req, res) => {
 // Get users (admin only)
 app.get('/api/users', async (req, res) => {
   try {
+    // Fix: Query the 'users' table and return proper structure
     const users = await User.find().select('-password');
-    res.json({ success: true, users });
+    
+    // Convert MongoDB documents to plain objects with id field
+    const usersList = users.map(user => ({
+      id: user._id.toString(),
+      _id: user._id,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      walletAddress: user.walletAddress,
+      isActive: user.isActive,
+      createdAt: user.createdAt
+    }));
+    
+    res.json({ success: true, users: usersList });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    console.error('Error fetching users:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch users' });
   }
 });
 

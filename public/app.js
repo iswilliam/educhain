@@ -139,48 +139,58 @@ async function login(event) {
 
 async function loadUserData() {
     try {
-        // Load assignment templates for ALL users
+        console.log('Loading user data for:', currentUser.role); // Debug log
+        
+        // Load assignment templates for ALL users - this queries assignmenttemplates table
         const templatesResult = await apiCall('/api/assignments/templates');
         if (templatesResult.success) {
-            assignmentTemplates = templatesResult.templates || []; // Fix: Use 'templates' not 'data'
+            assignmentTemplates = templatesResult.templates || [];
+            console.log('Loaded assignment templates:', assignmentTemplates.length); // Debug log
         }
 
-        // Load submissions based on role
-         if (currentUser.role === 'student') {
+        // Load submissions based on role - this queries submissions table
+        if (currentUser.role === 'student') {
             const submissionsResult = await apiCall(`/api/submissions/student/${currentUser.id}`);
             if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || []; // Fix: Use 'submissions' not 'data'
+                submissions = submissionsResult.submissions || [];
+                console.log('Loaded student submissions:', submissions.length); // Debug log
             }
-         } else if (currentUser.role === 'lecturer') {
-            // Load ALL submissions for lecturers to see their students' work
+        } else if (currentUser.role === 'lecturer' || currentUser.role === 'admin') {
+            // Load ALL submissions for lecturers and admins - queries submissions table
             const submissionsResult = await apiCall('/api/submissions/all');
             if (submissionsResult.success) {
-                submissions = submissionsResult.submissions || []; // Fix: Use 'submissions' not 'data'
+                submissions = submissionsResult.submissions || [];
+                console.log('Loaded all submissions:', submissions.length); // Debug log
             }
         }
 
-        // Load users for admin
+        // Load users for admin - this queries users table
         if (currentUser.role === 'admin') {
             const userResult = await apiCall('/api/users');
             if (userResult.success) {
-                users = userResult.users || []; // Fix: Use 'users' not 'data'
+                users = userResult.users || [];
+                console.log('Loaded users:', users.length); // Debug log
             }
         }
 
-        // Load audit logs for admin
+        // Load audit logs for admin - this queries auditlogs table
         if (currentUser.role === 'admin') {
             const auditResult = await apiCall('/api/audit');
             if (auditResult.success) {
-                auditLog = auditResult.auditLogs || []; // Fix: Use 'auditLogs' not 'data'
+                auditLog = auditResult.auditLogs || [];
+                console.log('Loaded audit logs:', auditLog.length); // Debug log
             }
         }
 
-        // Load blockchain records for ALL users
+        // Load blockchain records for ALL users - this queries blockchainrecords table
         const blockchainResult = await apiCall('/api/blockchain/records');
         if (blockchainResult.success) {
-            blockchainRecords = blockchainResult.records || []; // Fix: Use 'records' not 'data'
+            blockchainRecords = blockchainResult.records || [];
+            console.log('Loaded blockchain records:', blockchainRecords.length); // Debug log
         }
 
+        console.log('Data loading completed'); // Debug log
+        
     } catch (error) {
         console.error('Error loading user data:', error);
         showMessage('Some data could not be loaded from server.', 'warning');
@@ -322,7 +332,13 @@ function showOverview() {
 
     switch (currentUser.role) {
         case 'student':
-            const mySubmissions = submissions.filter(s => s.studentId === currentUser.id);
+            // Fix: Use proper filtering for student submissions
+            const mySubmissions = submissions.filter(s => {
+                return s.studentId === currentUser.id || 
+                       s.studentId?.toString() === currentUser.id?.toString() ||
+                       (s.student && (s.student._id === currentUser.id || s.student.id === currentUser.id));
+            });
+            
             stats = '<div class="features-grid">' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">📚</div>' +
@@ -336,13 +352,31 @@ function showOverview() {
                 '</div>' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">✅</div>' +
-                '<h3>' + mySubmissions.filter(s => s.grade).length + '</h3>' +
+                '<h3>' + mySubmissions.filter(s => s.grade || s.marks).length + '</h3>' +
                 '<p>Graded</p>' +
                 '</div>' +
                 '</div>';
             break;
+            
         case 'lecturer':
-            const myAssignments = assignmentTemplates.filter(a => a.createdBy === currentUser.id);
+            // Fix: Proper filtering for lecturer's created assignments from assignmenttemplates table
+            const myAssignments = assignmentTemplates.filter(a => {
+                // Handle both ObjectId and string comparisons
+                return a.createdBy === currentUser.id || 
+                       a.createdBy?.toString() === currentUser.id?.toString() ||
+                       (typeof a.createdBy === 'object' && a.createdBy._id === currentUser.id) ||
+                       (typeof a.createdBy === 'object' && a.createdBy._id?.toString() === currentUser.id?.toString());
+            });
+            
+            // Fix: Count all submissions for lecturer's assignments from submissions table
+            const myAssignmentIds = myAssignments.map(a => a._id?.toString() || a._id);
+            const allMySubmissions = submissions.filter(s => {
+                const submissionAssignmentId = s.assignmentTemplate?._id?.toString() || 
+                                              s.assignmentTemplate?.toString() || 
+                                              s.assignmentTemplateId?.toString();
+                return myAssignmentIds.includes(submissionAssignmentId);
+            });
+            
             stats = '<div class="features-grid">' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">📋</div>' +
@@ -351,27 +385,44 @@ function showOverview() {
                 '</div>' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">📝</div>' +
-                '<h3>' + submissions.length + '</h3>' +
+                '<h3>' + allMySubmissions.length + '</h3>' +
                 '<p>Total Submissions</p>' +
                 '</div>' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">⏳</div>' +
-                '<h3>' + submissions.filter(s => !s.grade).length + '</h3>' +
+                '<h3>' + allMySubmissions.filter(s => !s.grade && !s.marks).length + '</h3>' +
                 '<p>Pending Grading</p>' +
                 '</div>' +
                 '</div>';
             break;
+            
         case 'admin':
+            // Fix: Count from correct tables - users table, submissions table, blockchainrecords table
+            const totalUsers = users.length;
+            const totalAssignments = assignmentTemplates.length; // From assignmenttemplates table
+            const totalSubmissions = submissions.length; // From submissions table
+            const gradedSubmissions = submissions.filter(s => s.grade || s.marks).length;
+            
             stats = '<div class="features-grid">' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">👥</div>' +
-                '<h3>' + users.length + '</h3>' +
+                '<h3>' + totalUsers + '</h3>' +
                 '<p>Total Users</p>' +
                 '</div>' +
                 '<div class="feature-card">' +
+                '<div class="feature-icon">📚</div>' +
+                '<h3>' + totalAssignments + '</h3>' +
+                '<p>Total Assignments</p>' +
+                '</div>' +
+                '<div class="feature-card">' +
                 '<div class="feature-icon">📝</div>' +
-                '<h3>' + submissions.length + '</h3>' +
+                '<h3>' + totalSubmissions + '</h3>' +
                 '<p>Total Submissions</p>' +
+                '</div>' +
+                '<div class="feature-card">' +
+                '<div class="feature-icon">✅</div>' +
+                '<h3>' + gradedSubmissions + '</h3>' +
+                '<p>Graded Submissions</p>' +
                 '</div>' +
                 '<div class="feature-card">' +
                 '<div class="feature-icon">🔗</div>' +
