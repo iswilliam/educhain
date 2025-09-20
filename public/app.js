@@ -1515,28 +1515,38 @@ function showBlockchainSection() {
 function generateBlockchainRecordsHTML() {
     let recordsHTML = '<div class="records-list">';
     
-    // Sort by timestamp, most recent first
     const sortedRecords = [...blockchainRecords].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     
     sortedRecords.slice(0, 20).forEach(record => {
-        // Fix: Add null check and provide default value for record.type
-        const recordType = record.type || 'unknown';
+        const recordType = record.recordType || 'unknown';
         const displayType = recordType.replace('_', ' ').toUpperCase();
         
         recordsHTML += `
-            <div class="blockchain-record">
+            <div class="blockchain-record ${record.ethereumVerified ? 'ethereum-verified' : 'local-only'}">
                 <div class="record-header">
                     <span class="record-type">${displayType}</span>
                     <span class="record-timestamp">${new Date(record.timestamp).toLocaleString()}</span>
+                    ${record.ethereumVerified ? 
+                        '<span class="ethereum-badge">✓ Ethereum Verified</span>' : 
+                        '<span class="pending-badge">⏳ Pending Ethereum</span>'
+                    }
                 </div>
                 <div class="record-details">
-                    <p><strong>Hash:</strong> <code class="blockchain-hash" onclick="copyToClipboard('${record.hash}')">${record.hash}</code></p>
+                    <p><strong>Hash:</strong> <code class="blockchain-hash" onclick="copyToClipboard('${record.dataHash}')">${record.dataHash}</code></p>
                     <p><strong>Description:</strong> ${record.description || 'No description available'}</p>
-                    ${record.userId ? `<p><strong>User ID:</strong> ${record.userId}</p>` : ''}
+                    ${record.ethereumTxHash ? 
+                        `<p><strong>Ethereum TX:</strong> <a href="https://sepolia.etherscan.io/tx/${record.ethereumTxHash}" target="_blank" class="tx-link">${record.ethereumTxHash.substring(0, 16)}...</a></p>` : 
+                        '<p><strong>Status:</strong> Storing on Ethereum...</p>'
+                    }
+                    <p><strong>Block Number:</strong> ${record.blockNumber}</p>
                 </div>
                 <div class="record-actions">
                     <button class="btn btn-sm btn-secondary" onclick="verifyBlockchainRecord('${record.recordId}', '${recordType}')">Verify</button>
-                    <button class="btn btn-sm btn-outline" onclick="copyToClipboard('${record.hash}')">Copy Hash</button>
+                    <button class="btn btn-sm btn-outline" onclick="copyToClipboard('${record.dataHash}')">Copy Hash</button>
+                    ${record.ethereumTxHash ? 
+                        `<button class="btn btn-sm btn-primary" onclick="window.open('https://sepolia.etherscan.io/tx/${record.ethereumTxHash}', '_blank')">View on Etherscan</button>` : 
+                        ''
+                    }
                 </div>
             </div>
         `;
