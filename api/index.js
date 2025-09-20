@@ -13,7 +13,8 @@ const Web3 = require('web3');
 
 // Initialize Web3
 // Contract ABI - replace with your deployed contract ABI
-const contractABI = [
+const contractABI =
+  [
 	{
 		"anonymous": false,
 		"inputs": [
@@ -151,7 +152,7 @@ const contractABI = [
 		"stateMutability": "view",
 		"type": "function"
 	}
-];
+]
 
 // Contract instance
 const contract = new web3.eth.Contract(contractABI, process.env.CONTRACT_ADDRESS);
