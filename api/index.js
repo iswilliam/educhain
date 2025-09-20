@@ -12,10 +12,8 @@ const app = express();
 const Web3 = require('web3');
 
 // Initialize Web3
-const web3 = new Web3(process.env.SEPOLIA_RPC_URL);
-
-// Contract ABI (replace with your deployed contract ABI)
-[
+// Contract ABI - replace with your deployed contract ABI
+const contractABI = [
 	{
 		"anonymous": false,
 		"inputs": [
@@ -153,7 +151,7 @@ const web3 = new Web3(process.env.SEPOLIA_RPC_URL);
 		"stateMutability": "view",
 		"type": "function"
 	}
-]
+];
 
 // Contract instance
 const contract = new web3.eth.Contract(contractABI, process.env.CONTRACT_ADDRESS);
@@ -254,7 +252,10 @@ const blockchainRecordSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
   merkleRoot: { type: String },
   nonce: { type: String },
-  verified: { type: Boolean, default: true }
+  verified: { type: Boolean, default: true },
+  ethereumTxHash: { type: String },
+  ethereumVerified: { type: Boolean, default: false }, 
+  description: { type: String } 
 });
 
 const userSchema = new mongoose.Schema({
