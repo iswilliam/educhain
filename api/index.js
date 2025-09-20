@@ -12,6 +12,7 @@ const app = express();
 const Web3 = require('web3');
 
 // Initialize Web3
+const web3 = new Web3(process.env.SEPOLIA_RPC_URL || 'https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432');
 // Contract ABI - replace with your deployed contract ABI
 const contractABI =
   [
