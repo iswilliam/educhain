@@ -570,17 +570,12 @@
                     showMessage('Failed to connect wallet: ' + error.message, 'error');
                 }
             } else {
-                console.log('MetaMask not detected, using demo mode');
-                walletStatus.className = 'wallet-status wallet-disconnected';
-                walletStatus.innerHTML = '<span>MetaMask: Not Installed (Demo Mode)</span>';
-                showMessage('MetaMask not detected. Using demo mode.', 'warning');
+              console.error('MetaMask not detected');
+        walletStatus.className = 'wallet-status wallet-disconnected';
+        walletStatus.innerHTML = '<span>MetaMask: Not Installed</span>';
+        showMessage('MetaMask wallet is required but not detected. Please install MetaMask to continue.', 'error');
                 
-                // For demo purposes, simulate wallet connection
-                walletConnected = true;
-                userWalletAddress = '0x' + Math.random().toString(16).substr(2, 40);
-                if (signInForm) {
-                    signInForm.classList.remove('hidden');
-                }
+            
             }
         }
 
@@ -657,21 +652,7 @@
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                
-                // Fallback for demo mode when API is not available
-                if (username === 'admin' && password === 'password123' && role === 'admin') {
-                    currentUser = { id: '1', username: 'admin', name: 'System Administrator', role: 'admin' };
-                } else if (username === 'lecturer' && password === 'password123' && role === 'lecturer') {
-                    currentUser = { id: '2', username: 'lecturer', name: 'Dr. Jane Smith', role: 'lecturer' };
-                } else if (username === 'student' && password === 'password123' && role === 'student') {
-                    currentUser = { id: '3', username: 'student', name: 'John Student', role: 'student' };
-                } else {
-                    showMessage('Invalid credentials for demo mode. Try: admin/lecturer/student with password123', 'error');
-                    return;
-                }
-                
-                console.log('Using demo mode login, user:', currentUser);
-                
+                                
                 // Update UI
                 const signinBtn = document.getElementById('signinBtn');
                 const logoutBtn = document.getElementById('logoutBtn');

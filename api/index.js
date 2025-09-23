@@ -11,6 +11,25 @@ const app = express();
 
 const Web3 = require('web3');
 
+// Environment variable validation
+if (!process.env.MONGODB_URI) {
+  console.error('❌ MONGODB_URI environment variable is required');
+  process.exit(1);
+}
+
+if (!process.env.CONTRACT_ADDRESS) {
+  console.warn('⚠️  CONTRACT_ADDRESS not set - blockchain features will be limited');
+}
+
+if (!process.env.PRIVATE_KEY) {
+  console.warn('⚠️  PRIVATE_KEY not set - blockchain transactions will fail');
+}
+
+console.log('🔧 Environment check complete');
+console.log('📊 Database URI configured:', process.env.MONGODB_URI ? 'Yes' : 'No');
+console.log('🔗 Contract Address:', process.env.CONTRACT_ADDRESS ? 'Set' : 'Not Set');
+console.log('🔐 Private Key:', process.env.PRIVATE_KEY ? 'Set' : 'Not Set');
+
 // Initialize Web3
 const web3 = new Web3(process.env.SEPOLIA_RPC_URL || 'https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432');
 // Contract ABI - replace with your deployed contract ABI
@@ -474,12 +493,46 @@ async function seedDatabase() {
 }
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/educhain')
-  .then(() => {
-    console.log('✅ Connected to MongoDB');
-    seedDatabase();
+// Connect to MongoDB - No fallback, must connect to production DB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(async () => {
+    console.log('✅ Connected to MongoDB successfully');
+    console.log('📊 Database:', mongoose.connection.db.databaseName);
+    
+    // Check if we can perform basic operations
+    try {
+      const collections = await mongoose.connection.db.listCollections().toArray();
+      console.log('📁 Available collections:', collections.map(c => c.name).join(', '));
+      
+      // Seed database only if needed
+      await seedDatabase();
+    } catch (dbError) {
+      console.error('❌ Database operation failed:', dbError);
+      process.exit(1);
+    }
   })
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+  .catch(err => {
+    console.error('❌ MongoDB connection failed:', err.message);
+    console.error('🔍 Check your MONGODB_URI environment variable');
+    console.error('🔗 Current URI:', process.env.MONGODB_URI?.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@')); // Hide password in logs
+    process.exit(1);
+  });
+
+// Handle MongoDB connection events
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠️  MongoDB disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('🔄 MongoDB reconnected');
+});
 
 // Routes
 
