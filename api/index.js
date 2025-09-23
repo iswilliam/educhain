@@ -607,7 +607,7 @@ async function createBlockchainRecord(recordType, recordId, data) {
     timestamp: Date.now()
   });
   
-  // Always save to local database first
+  // Always create local record first - this ensures operations don't fail
   const blockchainRecord = new BlockchainRecord({
     recordType,
     recordId,
@@ -615,43 +615,53 @@ async function createBlockchainRecord(recordType, recordId, data) {
     previousHash,
     blockNumber,
     merkleRoot: recordHash,
-    nonce: 'pending_' + Date.now(),
+    nonce: 'local_' + Date.now(),
     verified: false
   });
   
   await blockchainRecord.save();
+  console.log('Local blockchain record saved:', recordHash);
   
-  // Try blockchain transaction if available
+  // Try blockchain transaction in background - don't let it block the operation
   if (blockchainEnabled && web3 && contract) {
-    try {
-      const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
-      web3.eth.accounts.wallet.add(account);
-      
-      const tx = contract.methods.createRecord(
-        recordHash,
-        recordType,
-        dataHash,
-        previousHash
-      );
-      
-      const gas = await tx.estimateGas({ from: account.address });
-      const gasPrice = await web3.eth.getGasPrice();
-      
-      const receipt = await tx.send({
-        from: account.address,
-        gas: Math.floor(gas * 1.2),
-        gasPrice: gasPrice
-      });
-      
-      // Update record with transaction hash
-      blockchainRecord.nonce = receipt.transactionHash;
-      blockchainRecord.verified = true;
-      await blockchainRecord.save();
-      
-    } catch (error) {
-      console.error('Blockchain transaction failed:', error);
-      // Keep local record with verified = false
-    }
+    setImmediate(async () => {
+      try {
+        console.log('Attempting blockchain transaction...');
+        const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
+        web3.eth.accounts.wallet.add(account);
+        
+        const tx = contract.methods.createRecord(
+          recordHash,
+          recordType,
+          dataHash,
+          previousHash
+        );
+        
+        const gas = await tx.estimateGas({ from: account.address });
+        const gasPrice = await web3.eth.getGasPrice();
+        
+        console.log('Sending transaction with gas:', gas, 'gasPrice:', gasPrice);
+        
+        const receipt = await tx.send({
+          from: account.address,
+          gas: Math.floor(gas * 1.2),
+          gasPrice: gasPrice
+        });
+        
+        console.log('Blockchain transaction successful:', receipt.transactionHash);
+        
+        // Update record with transaction hash
+        blockchainRecord.nonce = receipt.transactionHash;
+        blockchainRecord.verified = true;
+        await blockchainRecord.save();
+        
+      } catch (error) {
+        console.error('Background blockchain transaction failed:', error.message);
+        // Don't throw - just log the error
+      }
+    });
+  } else {
+    console.log('Blockchain not available - saving locally only');
   }
   
   return blockchainRecord;
@@ -1000,6 +1010,18 @@ app.post('/api/blockchain/verify', async (req, res) => {
     console.error('Verification error:', error);
     res.status(500).json({ success: false, error: 'Verification failed: ' + error.message });
   }
+});
+
+// Add this route after your other routes
+app.get('/api/blockchain/status', (req, res) => {
+  res.json({
+    blockchainEnabled,
+    web3Connected: !!web3,
+    contractLoaded: !!contract,
+    rpcUrl: process.env.SEPOLIA_RPC_URL ? 'Set' : 'Not set',
+    contractAddress: process.env.CONTRACT_ADDRESS ? 'Set' : 'Not set',
+    privateKey: process.env.PRIVATE_KEY ? 'Set' : 'Not set'
+  });
 });
 
 // Get assignment templates (for students to view available assignments)
