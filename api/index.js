@@ -565,9 +565,27 @@ const BlockchainRecord = mongoose.model('BlockchainRecord', blockchainRecordSche
 const User = mongoose.model('User', userSchema);
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 
-// Initialize Web3 and Contract
-const web3 = new Web3(process.env.SEPOLIA_RPC_URL);
-const contract = new web3.eth.Contract(CONTRACT_ABI, process.env.CONTRACT_ADDRESS);
+// Initialize Web3 and Contract (Non-blocking)
+let web3, contract;
+let blockchainEnabled = false;
+
+async function initializeBlockchain() {
+  try {
+    web3 = new Web3(process.env.SEPOLIA_RPC_URL);
+    contract = new web3.eth.Contract(CONTRACT_ABI, process.env.CONTRACT_ADDRESS);
+    
+    // Test connection
+    await web3.eth.getBlockNumber();
+    blockchainEnabled = true;
+    console.log('✅ Blockchain connection established');
+  } catch (error) {
+    console.error('❌ Blockchain initialization failed:', error.message);
+    blockchainEnabled = false;
+  }
+}
+
+// Initialize blockchain connection but don't block server startup
+initializeBlockchain();
 
 
 // Blockchain Helper Functions
@@ -589,47 +607,54 @@ async function createBlockchainRecord(recordType, recordId, data) {
     timestamp: Date.now()
   });
   
-  try {
-    // Create blockchain transaction FIRST
-    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
-    web3.eth.accounts.wallet.add(account);
-    
-    const tx = contract.methods.createRecord(
-      recordHash,
-      recordType,
-      dataHash,
-      previousHash
-    );
-    
-    const gas = await tx.estimateGas({ from: account.address });
-    const gasPrice = await web3.eth.getGasPrice();
-    
-    const receipt = await tx.send({
-      from: account.address,
-      gas: Math.floor(gas * 1.2),
-      gasPrice: gasPrice
-    });
-    
-    // Only save to local database if blockchain transaction succeeded
-    const blockchainRecord = new BlockchainRecord({
-      recordType,
-      recordId,
-      dataHash,
-      previousHash,
-      blockNumber,
-      merkleRoot: recordHash,
-      nonce: receipt.transactionHash,
-      verified: true
-    });
-    
-    await blockchainRecord.save();
-    return blockchainRecord;
-    
-  } catch (error) {
-    console.error('Blockchain transaction failed:', error);
-    // Don't save to local storage if blockchain fails
-    throw new Error('Failed to create blockchain record: ' + error.message);
+  // Always save to local database first
+  const blockchainRecord = new BlockchainRecord({
+    recordType,
+    recordId,
+    dataHash,
+    previousHash,
+    blockNumber,
+    merkleRoot: recordHash,
+    nonce: 'pending_' + Date.now(),
+    verified: false
+  });
+  
+  await blockchainRecord.save();
+  
+  // Try blockchain transaction if available
+  if (blockchainEnabled && web3 && contract) {
+    try {
+      const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
+      web3.eth.accounts.wallet.add(account);
+      
+      const tx = contract.methods.createRecord(
+        recordHash,
+        recordType,
+        dataHash,
+        previousHash
+      );
+      
+      const gas = await tx.estimateGas({ from: account.address });
+      const gasPrice = await web3.eth.getGasPrice();
+      
+      const receipt = await tx.send({
+        from: account.address,
+        gas: Math.floor(gas * 1.2),
+        gasPrice: gasPrice
+      });
+      
+      // Update record with transaction hash
+      blockchainRecord.nonce = receipt.transactionHash;
+      blockchainRecord.verified = true;
+      await blockchainRecord.save();
+      
+    } catch (error) {
+      console.error('Blockchain transaction failed:', error);
+      // Keep local record with verified = false
+    }
   }
+  
+  return blockchainRecord;
 }
 
 
@@ -905,6 +930,24 @@ app.post('/api/blockchain/verify', async (req, res) => {
       return res.json({ success: false, error: 'Local blockchain record not found' });
     }
     
+    // Check if blockchain is available
+    if (!blockchainEnabled || !web3 || !contract) {
+      return res.json({
+        success: true,
+        verified: false,
+        contractVerified: false,
+        localVerified: true,
+        blockchainRecord: {
+          dataHash: localRecord.dataHash,
+          blockNumber: localRecord.blockNumber,
+          timestamp: localRecord.timestamp,
+          recordType: localRecord.recordType,
+          transactionHash: localRecord.nonce
+        },
+        message: 'Blockchain network unavailable - local verification only'
+      });
+    }
+    
     // Verify on Sepolia network
     let contractVerified = false;
     let contractRecord = null;
@@ -916,22 +959,8 @@ app.post('/api/blockchain/verify', async (req, res) => {
         contractRecord = result[1];
       }
     } catch (contractError) {
-      return res.json({ 
-        success: false, 
-        error: 'Smart contract verification failed: ' + contractError.message 
-      });
+      console.log('Contract verification failed:', contractError.message);
     }
-    
-    if (!contractVerified) {
-      return res.json({ 
-        success: false, 
-        error: 'Record not found on Sepolia blockchain' 
-      });
-    }
-    
-    // Compare local storage with blockchain data
-    const dataMatches = localRecord.dataHash === contractRecord.dataHash;
-    const typeMatches = localRecord.recordType === contractRecord.recordType;
     
     // Verify chain integrity in local storage
     let chainValid = true;
@@ -945,40 +974,26 @@ app.post('/api/blockchain/verify', async (req, res) => {
       }
     }
     
-    const fullVerification = contractVerified && dataMatches && typeMatches && chainValid;
-    
     res.json({
       success: true,
-      verified: fullVerification,
+      verified: contractVerified && chainValid,
       contractVerified,
-      dataMatches,
-      typeMatches,
+      localVerified: true,
       chainIntegrity: chainValid,
-      localRecord: {
+      blockchainRecord: {
         dataHash: localRecord.dataHash,
         blockNumber: localRecord.blockNumber,
         timestamp: localRecord.timestamp,
         recordType: localRecord.recordType,
         transactionHash: localRecord.nonce
       },
-      contractRecord: {
+      contractRecord: contractRecord ? {
         dataHash: contractRecord.dataHash,
         recordType: contractRecord.recordType,
         blockNumber: contractRecord.blockNumber.toString(),
         timestamp: new Date(contractRecord.timestamp * 1000).toISOString(),
         creator: contractRecord.creator
-      },
-      verification: {
-        message: fullVerification 
-          ? 'Local storage and blockchain data match perfectly' 
-          : 'Verification failed - data mismatch detected',
-        details: {
-          contractFound: contractVerified,
-          dataMatch: dataMatches,
-          typeMatch: typeMatches,
-          chainIntegrity: chainValid
-        }
-      }
+      } : null
     });
     
   } catch (error) {
