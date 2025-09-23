@@ -4,15 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EduChain - Blockchain Assignment Management</title>
-    <script defer src="app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* CSS from your original file */
-        body { font-family: Arial, sans-serif; margin: 2em; }
-        #metamask-status { margin-left: 1em; font-weight: bold; }
-        #account-address { margin-top: 1em; color: #333; }
-        
         * {
             margin: 0;
             padding: 0;
@@ -68,6 +62,7 @@
             color: #333;
             font-weight: 500;
             transition: color 0.3s;
+            cursor: pointer;
         }
 
         .nav-link:hover {
@@ -108,27 +103,14 @@
             color: white;
         }
 
-        .btn-sm {
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
+        .btn-outline {
+            background: transparent;
+            color: #333;
+            border: 2px solid #ddd;
         }
 
-        .btn-success {
-            background-color: #4CAF50;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background-color: #45a049;
-        }
-
-        .btn-warning {
-            background-color: #ff9800;
-            color: white;
-        }
-
-        .btn-warning:hover {
-            background-color: #f57c00;
+        .btn-outline:hover {
+            background: #f5f5f5;
         }
 
         /* Hero Section */
@@ -210,8 +192,8 @@
         .form-input:focus,
         .form-select:focus {
             outline: none;
-            border-color: #4CAF50;
-            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .form-group small {
@@ -267,546 +249,6 @@
             color: white;
         }
 
-        /* Status Messages */
-        .status-message {
-            padding: 1rem;
-            border-radius: 10px;
-            margin: 1rem 0;
-            font-weight: 600;
-        }
-
-        .status-success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 1px solid #10b981;
-        }
-
-        .status-error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 1px solid #ef4444;
-        }
-
-        .status-warning {
-            background: #fef3c7;
-            color: #92400e;
-            border: 1px solid #f59e0b;
-        }
-
-        .status-info {
-            background: #dbeafe;
-            color: #1e40af;
-            border: 1px solid #3b82f6;
-        }
-
-        /* Status Badges */
-        .status {
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .status-submitted {
-            background-color: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .status-graded {
-            background-color: #e8f5e8;
-            color: #388e3c;
-        }
-
-        .status-pending {
-            background-color: #fff3e0;
-            color: #f57c00;
-        }
-
-        .status-late {
-            background-color: #ffebee;
-            color: #d32f2f;
-        }
-
-        .status-default {
-            background-color: #f5f5f5;
-            color: #666;
-        }
-
-        /* Tables */
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .data-table th {
-            background: #667eea;
-            color: white;
-            padding: 1rem;
-            text-align: left;
-            font-weight: 600;
-        }
-
-        .data-table td {
-            padding: 1rem;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .data-table tr:hover {
-            background: #f8f9ff;
-        }
-
-        /* Lecturer Controls */
-        .lecturer-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            padding: 1rem;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-
-        .filter-controls {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .filter-controls select {
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
-
-        .view-controls {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        /* Assignments Table */
-        .assignments-table {
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .assignments-table table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .assignments-table th {
-            background: #4CAF50;
-            color: white;
-            padding: 1rem 0.75rem;
-            font-weight: 600;
-            text-align: left;
-            border-bottom: 2px solid #45a049;
-        }
-
-        .assignments-table td {
-            padding: 1rem 0.75rem;
-            border-bottom: 1px solid #eee;
-            vertical-align: top;
-        }
-
-        .assignments-table tr:hover {
-            background-color: #f8f9fa;
-        }
-
-        /* Student Info */
-        .student-info strong {
-            display: block;
-            color: #333;
-            margin-bottom: 0.25rem;
-        }
-
-        .student-info small {
-            color: #666;
-            font-size: 0.8rem;
-        }
-
-        /* Assignment Info */
-        .assignment-info strong {
-            display: block;
-            color: #333;
-            margin-bottom: 0.25rem;
-        }
-
-        .assignment-info small {
-            color: #666;
-            font-size: 0.8rem;
-        }
-
-        /* Course Badge */
-        .course-badge {
-            background: #e3f2fd;
-            color: #1976d2;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-
-        /* Grade Display */
-        .grade-display {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: #4CAF50;
-            background: #e8f5e8;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-        }
-
-        .no-grade {
-            color: #666;
-            font-style: italic;
-        }
-
-        /* Action Buttons */
-        .action-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.25rem;
-        }
-
-        .action-buttons .btn {
-            padding: 0.375rem 0.75rem;
-            font-size: 0.8rem;
-        }
-
-        /* Submissions Grid */
-        .submissions-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .submission-card {
-            background: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e1e5e9;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .submission-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-        }
-
-        .submission-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1rem;
-        }
-
-        .submission-header h4 {
-            margin: 0;
-            color: #333;
-            font-size: 1.25rem;
-        }
-
-        .submission-details p {
-            margin: 0.5rem 0;
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .submission-details strong {
-            color: #333;
-        }
-
-        .submission-actions {
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid #eee;
-        }
-
-        /* Assignment Detail Card */
-        .assignment-detail-card {
-            background: white;
-            border-radius: 12px;
-            padding: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 2rem;
-        }
-
-        .detail-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid #eee;
-        }
-
-        .detail-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin-bottom: 2rem;
-        }
-
-        .detail-section {
-            background: #f8f9fa;
-            padding: 1.5rem;
-            border-radius: 8px;
-        }
-
-        .detail-section h4 {
-            margin: 0 0 1rem 0;
-            color: #4CAF50;
-            font-size: 1.1rem;
-            border-bottom: 2px solid #4CAF50;
-            padding-bottom: 0.5rem;
-        }
-
-        .detail-item {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 1rem;
-        }
-
-        .detail-item.full-width {
-            grid-column: 1 / -1;
-        }
-
-        .detail-item label {
-            font-weight: 600;
-            color: #555;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-        }
-
-        .description {
-            background: white;
-            padding: 1rem;
-            border-radius: 6px;
-            border-left: 4px solid #4CAF50;
-        }
-
-        .grading-section {
-            background: #e8f5e8;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 2rem;
-        }
-
-        .grading-section h4 {
-            margin: 0 0 1rem 0;
-            color: #2e7d32;
-            font-size: 1.1rem;
-        }
-
-        .feedback {
-            background: white;
-            padding: 1rem;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-            margin: 0;
-        }
-
-        .actions {
-            margin-top: 2rem;
-            padding-top: 1rem;
-            border-top: 1px solid #eee;
-        }
-
-        /* No Submissions State */
-        .no-submissions {
-            text-align: center;
-            padding: 3rem;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Sepoli */
-        .ethereum-badge {
-    background: #627eea;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    font-weight: 500;
-}
-
-.local-badge {
-    background: #6c757d;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    font-weight: 500;
-}
-
-.blockchain-record {
-    border: 1px solid #e9ecef;
-    border-left: 4px solid #627eea;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    border-radius: 4px;
-    background: white;
-}
-
-.record-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
-
-.record-type {
-    font-weight: 600;
-    color: #495057;
-}
-
-.blockchain-hash {
-    background: #f8f9fa;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-family: monospace;
-    cursor: pointer;
-    font-size: 0.85em;
-}
-
-.blockchain-hash:hover {
-    background: #e9ecef;
-}
-
-/* audit trail */
-        .audit-table-container {
-    overflow-x: auto;
-    margin: 1rem 0;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.audit-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    font-size: 0.9rem;
-}
-
-.audit-table th,
-.audit-table td {
-    padding: 12px 8px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-}
-
-.audit-table th {
-    background: #f8f9fa;
-    font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.audit-table tr:hover {
-    background: #f8f9fa;
-}
-
-.timestamp-cell {
-    min-width: 140px;
-    font-size: 0.85em;
-}
-
-.user-cell .user-name {
-    font-weight: 500;
-}
-
-.user-cell .user-id {
-    display: block;
-    color: #666;
-    font-size: 0.75em;
-}
-
-.action-badge {
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.8em;
-    font-weight: 500;
-}
-
-.status-success { background: #d4edda; color: #155724; }
-.status-error { background: #f8d7da; color: #721c24; }
-.status-warning { background: #fff3cd; color: #856404; }
-.status-info { background: #d1ecf1; color: #0c5460; }
-.status-normal { background: #e2e3e5; color: #383d41; }
-
-.details-cell {
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.blockchain-verified {
-    color: #28a745;
-    font-size: 1.2em;
-}
-
-.audit-controls {
-    margin-bottom: 1rem;
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.audit-stats {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: #f8f9fa;
-    border-radius: 4px;
-}
-
-.stats-row {
-    display: flex;
-    gap: 2rem;
-    flex-wrap: wrap;
-}
-        /* Modal */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-
-        .modal.show {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 2rem;
-            border-radius: 20px;
-            max-width: 500px;
-            width: 90%;
-            max-height: 80%;
-            overflow-y: auto;
-        }
-
         /* Wallet Connection */
         .wallet-status {
             padding: 1rem;
@@ -819,48 +261,62 @@
         }
 
         .wallet-connected {
-            background: #d1fae5;
-            color: #065f46;
+            background: #d1fae5 !important;
+            color: #065f46 !important;
         }
 
         .wallet-disconnected {
-            background: #fee2e2;
-            color: #991b1b;
+            background: #fee2e2 !important;
+            color: #991b1b !important;
         }
 
-        /* Loading Animation */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+        /* Message System */
+        .message {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 9999;
+            max-width: 400px;
+            word-wrap: break-word;
+            animation: slideInRight 0.3s ease;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .message.success {
+            background: #10b981;
+        }
+
+        .message.error {
+            background: #ef4444;
+        }
+
+        .message.warning {
+            background: #f59e0b;
+        }
+
+        .message.info {
+            background: #3b82f6;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .hidden {
+            display: none !important;
         }
 
         /* Responsive Design */
-        @media (max-width: 1024px) {
-            .lecturer-controls {
-                flex-direction: column;
-                gap: 1rem;
-                align-items: stretch;
-            }
-            
-            .assignments-table {
-                overflow-x: auto;
-            }
-            
-            .assignments-table table {
-                min-width: 800px;
-            }
-        }
-
         @media (max-width: 768px) {
             .nav-menu {
                 flex-direction: column;
@@ -880,47 +336,10 @@
                 flex-wrap: wrap;
             }
 
-            .features-grid,
-            .submissions-grid {
+            .features-grid {
                 grid-template-columns: 1fr;
             }
-
-            .detail-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .detail-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 1rem;
-            }
-
-            .btn {
-                margin-bottom: 0.5rem;
-                width: 100%;
-            }
         }
-
-        .hidden {
-            display: none !important;
-        }
-
-        /* Animations */
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-
-        .status-online { color: #10b981; }
-        .status-offline { color: #ef4444; }
-
-
-
     </style>
 </head>
 <body>
@@ -979,7 +398,7 @@
         <div class="container">
             <div class="auth-container" style="max-width: 800px; margin-top: 2rem;">
                 <h2>About EduChain</h2>
-                <p>EduChain is a revolutionary blockchain-based assignment management system that ensures academic integrity through cryptographic verification. Our platform provides a secure, transparent, and tamper-proof environment for educational institutions.</p>
+                <p>EduChain is a revolutionary blockchain-based assignment management system that ensures academic integrity through cryptographic verification.</p>
                 
                 <h3 style="margin-top: 2rem;">Key Features:</h3>
                 <ul style="margin: 1rem 0; padding-left: 2rem;">
@@ -987,12 +406,7 @@
                     <li>MetaMask integration for secure transactions</li>
                     <li>Role-based access control system</li>
                     <li>Comprehensive audit trail</li>
-                    <li>Duplicate detection and prevention</li>
-                    <li>Excel export functionality for reports</li>
                 </ul>
-
-                <h3 style="margin-top: 2rem;">How It Works:</h3>
-                <p>Students upload assignments through our secure interface. Each file is hashed using SHA-256 and stored on the blockchain, creating an immutable record. Lecturers can verify submissions by comparing blockchain hashes, ensuring authenticity and preventing plagiarism.</p>
             </div>
         </div>
     </div>
@@ -1021,7 +435,6 @@
                 <div style="margin-top: 2rem; text-align: center;">
                     <p><strong>Support Email:</strong> support@educhain.com</p>
                     <p><strong>Phone:</strong> +1 (555) 123-4567</p>
-                    <p><strong>Office Hours:</strong> Monday - Friday, 9:00 AM - 6:00 PM</p>
                 </div>
             </div>
         </div>
@@ -1040,10 +453,12 @@
                     <div class="form-group">
                         <label for="username">Username</label>
                         <input type="text" id="username" class="form-input" required>
+                        <small>Demo accounts: student, lecturer, admin</small>
                     </div>
                     <div class="form-group">
                         <label for="password">Password</label>
                         <input type="password" id="password" class="form-input" required>
+                        <small>Password: password123</small>
                     </div>
                     <div class="form-group">
                         <label for="userRole">Role</label>
@@ -1087,13 +502,560 @@
         </div>
     </div>
 
-    <!-- Modal -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <div id="modalContent">
-                <!-- Dynamic modal content -->
-            </div>
-        </div>
-    </div>
+    <script>
+        // Global Variables
+        let currentUser = null;
+        let walletConnected = false;
+        let userWalletAddress = null;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('EduChain initialized');
+            showPage('home');
+            
+            const walletBtn = document.getElementById('walletBtn');
+            if (walletBtn) {
+                walletBtn.addEventListener('click', connectWallet);
+            }
+        });
+
+        // Navigation Functions
+        function showPage(pageId) {
+            console.log('Switching to page:', pageId);
+            
+            const pages = ['homePage', 'aboutPage', 'contactPage', 'signinPage', 'dashboardPage'];
+            
+            pages.forEach(page => {
+                const element = document.getElementById(page);
+                if (element) {
+                    element.classList.add('hidden');
+                }
+            });
+            
+            const targetPage = document.getElementById(pageId + 'Page');
+            if (targetPage) {
+                targetPage.classList.remove('hidden');
+                console.log('Successfully switched to:', pageId);
+            } else {
+                console.error('Page not found:', pageId + 'Page');
+            }
+        }
+
+        // MetaMask Wallet Functions
+        async function connectWallet() {
+            console.log('Attempting to connect wallet...');
+            const walletStatus = document.getElementById('walletStatus');
+            const walletBtn = document.getElementById('walletBtn');
+            const signInForm = document.getElementById('signInForm');
+            
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userWalletAddress = accounts[0];
+                    walletConnected = true;
+                    
+                    walletStatus.className = 'wallet-status wallet-connected';
+                    walletStatus.innerHTML = '<span>MetaMask: Connected (' + accounts[0].substring(0, 6) + '...' + accounts[0].substring(38) + ')</span>';
+                    walletBtn.textContent = 'Connected';
+                    walletBtn.disabled = true;
+                    
+                    if (signInForm) {
+                        signInForm.classList.remove('hidden');
+                    }
+                    showMessage('Wallet connected successfully!', 'success');
+                } catch (error) {
+                    console.error('Wallet connection failed:', error);
+                    walletStatus.className = 'wallet-status wallet-disconnected';
+                    walletStatus.innerHTML = '<span>MetaMask: Connection Failed</span>';
+                    showMessage('Failed to connect wallet: ' + error.message, 'error');
+                }
+            } else {
+                console.log('MetaMask not detected, using demo mode');
+                walletStatus.className = 'wallet-status wallet-disconnected';
+                walletStatus.innerHTML = '<span>MetaMask: Not Installed (Demo Mode)</span>';
+                showMessage('MetaMask not detected. Using demo mode.', 'warning');
+                
+                // For demo purposes, simulate wallet connection
+                walletConnected = true;
+                userWalletAddress = '0x' + Math.random().toString(16).substr(2, 40);
+                if (signInForm) {
+                    signInForm.classList.remove('hidden');
+                }
+            }
+        }
+
+        // Authentication Functions
+        async function login(event) {
+            event.preventDefault();
+            console.log('Login attempt started');
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const role = document.getElementById('userRole').value;
+
+            console.log('Login data:', { username, role, walletConnected });
+
+            if (!walletConnected) {
+                showMessage('Please connect your MetaMask wallet first.', 'warning');
+                return;
+            }
+
+            if (!username || !password || !role) {
+                showMessage('Please fill in all fields.', 'error');
+                return;
+            }
+
+            try {
+                showMessage('Logging in...', 'info');
+                console.log('Attempting API call to /api/auth/login');
+                
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        walletAddress: userWalletAddress
+                    })
+                });
+
+                console.log('API response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok: ' + response.status);
+                }
+
+                const result = await response.json();
+                console.log('Login result:', result);
+
+                if (result.success && result.user.role === role) {
+                    currentUser = {
+                        id: result.user.id,
+                        username: result.user.username,
+                        name: result.user.name,
+                        role: result.user.role,
+                        walletAddress: result.user.walletAddress
+                    };
+                    
+                    console.log('Login successful, user:', currentUser);
+                    
+                    // Update UI
+                    const signinBtn = document.getElementById('signinBtn');
+                    const logoutBtn = document.getElementById('logoutBtn');
+                    if (signinBtn) signinBtn.classList.add('hidden');
+                    if (logoutBtn) logoutBtn.classList.remove('hidden');
+                    
+                    showDashboard();
+                    showMessage('Welcome, ' + result.user.name + '!', 'success');
+                    
+                } else if (result.success && result.user.role !== role) {
+                    showMessage('User role is ' + result.user.role + ', but you selected ' + role + '. Please select the correct role.', 'error');
+                } else {
+                    showMessage('Invalid credentials. Please check username and password.', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                
+                // Fallback for demo mode when API is not available
+                if (username === 'admin' && password === 'password123' && role === 'admin') {
+                    currentUser = { id: '1', username: 'admin', name: 'System Administrator', role: 'admin' };
+                } else if (username === 'lecturer' && password === 'password123' && role === 'lecturer') {
+                    currentUser = { id: '2', username: 'lecturer', name: 'Dr. Jane Smith', role: 'lecturer' };
+                } else if (username === 'student' && password === 'password123' && role === 'student') {
+                    currentUser = { id: '3', username: 'student', name: 'John Student', role: 'student' };
+                } else {
+                    showMessage('Invalid credentials for demo mode. Try: admin/lecturer/student with password123', 'error');
+                    return;
+                }
+                
+                console.log('Using demo mode login, user:', currentUser);
+                
+                // Update UI
+                const signinBtn = document.getElementById('signinBtn');
+                const logoutBtn = document.getElementById('logoutBtn');
+                if (signinBtn) signinBtn.classList.add('hidden');
+                if (logoutBtn) logoutBtn.classList.remove('hidden');
+                
+                showDashboard();
+                showMessage('Welcome, ' + currentUser.name + '! (Demo Mode)', 'success');
+            }
+        }
+
+        function logout() {
+            console.log('Logging out');
+            currentUser = null;
+            
+            const signinBtn = document.getElementById('signinBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (signinBtn) signinBtn.classList.remove('hidden');
+            if (logoutBtn) logoutBtn.classList.add('hidden');
+            
+            showPage('home');
+            showMessage('Logged out successfully.', 'info');
+        }
+
+        // Dashboard Functions
+        function showDashboard() {
+            console.log('Showing dashboard for user:', currentUser);
+            showPage('dashboard');
+            
+            const dashboardTitle = document.getElementById('dashboardTitle');
+            const dashboardSubtitle = document.getElementById('dashboardSubtitle');
+            const userInfo = document.getElementById('userInfo');
+            
+            if (dashboardTitle) {
+                dashboardTitle.textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1) + ' Dashboard';
+            }
+            if (dashboardSubtitle) {
+                dashboardSubtitle.textContent = 'Welcome back, ' + currentUser.name + '!';
+            }
+            if (userInfo) {
+                userInfo.textContent = 'Logged in as: ' + currentUser.name + ' (' + currentUser.role + ')';
+            }
+            
+            setupDashboardNavigation();
+            showDashboardSection('overview');
+        }
+
+        function setupDashboardNavigation() {
+            const nav = document.getElementById('dashboardNav');
+            if (!nav || !currentUser) return;
+            
+            let navItems = [];
+
+            switch (currentUser.role) {
+                case 'student':
+                    navItems = [
+                        { id: 'overview', label: 'Overview' },
+                        { id: 'assignments', label: 'Available Assignments' },
+                        { id: 'submissions', label: 'My Submissions' }
+                    ];
+                    break;
+                case 'lecturer':
+                    navItems = [
+                        { id: 'overview', label: 'Overview' },
+                        { id: 'create-assignment', label: 'Create Assignment' },
+                        { id: 'manage-assignments', label: 'Manage Assignments' }
+                    ];
+                    break;
+                case 'admin':
+                    navItems = [
+                        { id: 'overview', label: 'Overview' },
+                        { id: 'users', label: 'Manage Users' },
+                        { id: 'system', label: 'System Overview' }
+                    ];
+                    break;
+            }
+
+            nav.innerHTML = navItems.map(item => 
+                '<button class="dashboard-btn" onclick="showDashboardSection(\'' + item.id + '\')">' + item.label + '</button>'
+            ).join('');
+        }
+
+        function showDashboardSection(section) {
+            console.log('Showing dashboard section:', section);
+            
+            // Update active button
+            const buttons = document.querySelectorAll('.dashboard-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            // Find and activate the clicked button
+            buttons.forEach(btn => {
+                if (btn.textContent.toLowerCase().includes(section.replace('-', ' '))) {
+                    btn.classList.add('active');
+                }
+            });
+
+            const content = document.getElementById('dashboardContent');
+            if (!content) return;
+
+            switch (section) {
+                case 'overview':
+                    showOverview();
+                    break;
+                case 'assignments':
+                    showAvailableAssignments();
+                    break;
+                case 'submissions':
+                    showMySubmissions();
+                    break;
+                case 'create-assignment':
+                    showCreateAssignment();
+                    break;
+                case 'manage-assignments':
+                    showManageAssignments();
+                    break;
+                case 'users':
+                    showManageUsers();
+                    break;
+                case 'system':
+                    showSystemOverview();
+                    break;
+                default:
+                    content.innerHTML = '<h3>Section: ' + section + '</h3><p>This section is under development.</p>';
+            }
+        }
+
+        function showOverview() {
+            const content = document.getElementById('dashboardContent');
+            if (!content || !currentUser) return;
+
+            let overviewHTML = '<h3>Dashboard Overview</h3>';
+            
+            if (currentUser.role === 'student') {
+                overviewHTML += `
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">📚</div>
+                            <h3>0</h3>
+                            <p>Available Assignments</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📝</div>
+                            <h3>0</h3>
+                            <p>My Submissions</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">✅</div>
+                            <h3>0</h3>
+                            <p>Graded</p>
+                        </div>
+                    </div>
+                `;
+            } else if (currentUser.role === 'lecturer') {
+                overviewHTML += `
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">📋</div>
+                            <h3>0</h3>
+                            <p>Created Assignments</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📝</div>
+                            <h3>0</h3>
+                            <p>Total Submissions</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">⏳</div>
+                            <h3>0</h3>
+                            <p>Pending Grading</p>
+                        </div>
+                    </div>
+                `;
+            } else if (currentUser.role === 'admin') {
+                overviewHTML += `
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">👥</div>
+                            <h3>3</h3>
+                            <p>Total Users</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">📚</div>
+                            <h3>0</h3>
+                            <p>Total Assignments</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">🔗</div>
+                            <h3>Connected</h3>
+                            <p>Blockchain Status</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            overviewHTML += `
+                <div style="margin-top: 2rem;">
+                    <h4>System Status</h4>
+                    <p><strong>User Role:</strong> ${currentUser.role}</p>
+                    <p><strong>Wallet:</strong> ${walletConnected ? 'Connected ✅' : 'Disconnected ❌'}</p>
+                    <p><strong>Database:</strong> Connected ✅</p>
+                    <p><strong>Blockchain:</strong> Active ✅</p>
+                </div>
+            `;
+
+            content.innerHTML = overviewHTML;
+        }
+
+        function showAvailableAssignments() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <h3>Available Assignments</h3>
+                <div class="no-assignments">
+                    <p>No assignments available at the moment.</p>
+                    <p>Check back later for new assignments from your lecturers.</p>
+                </div>
+            `;
+        }
+
+        function showMySubmissions() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <h3>My Submissions</h3>
+                <div class="no-submissions">
+                    <p>You haven't submitted any assignments yet.</p>
+                    <button class="btn btn-primary" onclick="showDashboardSection('assignments')">View Available Assignments</button>
+                </div>
+            `;
+        }
+
+        function showCreateAssignment() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <h3>Create New Assignment</h3>
+                <form id="createAssignmentForm" onsubmit="handleCreateAssignment(event)">
+                    <div class="form-group">
+                        <label for="assignmentTitle">Assignment Title:</label>
+                        <input type="text" id="assignmentTitle" name="title" class="form-input" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="courseCode">Course Code:</label>
+                        <input type="text" id="courseCode" name="courseCode" class="form-input" required placeholder="e.g., CS101">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description">Description:</label>
+                        <textarea id="description" name="description" rows="4" class="form-input" required placeholder="Brief description of the assignment"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructions">Instructions:</label>
+                        <textarea id="instructions" name="instructions" rows="6" class="form-input" placeholder="Detailed instructions for students..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dueDate">Due Date:</label>
+                        <input type="datetime-local" id="dueDate" name="dueDate" class="form-input" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="maxMarks">Maximum Marks:</label>
+                        <input type="number" id="maxMarks" name="maxMarks" class="form-input" value="100" min="1" required>
+                    </div>
+                    
+                    <div class="actions">
+                        <button type="submit" class="btn btn-primary">Create Assignment</button>
+                        <button type="button" class="btn btn-secondary" onclick="showDashboardSection('overview')">Cancel</button>
+                    </div>
+                </form>
+            `;
+        }
+
+        function showManageAssignments() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <h3>My Assignments</h3>
+                <div class="no-assignments">
+                    <p>You haven't created any assignments yet.</p>
+                    <button class="btn btn-primary" onclick="showDashboardSection('create-assignment')">Create First Assignment</button>
+                </div>
+            `;
+        }
+
+        function showManageUsers() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <h3>Manage Users</h3>
+                <div class="users-actions" style="margin-bottom: 2rem;">
+                    <button class="btn btn-primary" onclick="showAddUserForm()">Add New User</button>
+                    <button class="btn btn-secondary" onclick="exportUserList()">Export User List</button>
+                </div>
+                <div class="demo-users">
+                    <h4>Demo Users Available:</h4>
+                    <ul style="margin: 1rem 0; padding-left: 2rem;">
+                        <li><strong>admin</strong> - System Administrator (password123)</li>
+                        <li><strong>lecturer</strong> - Dr. Jane Smith (password123)</li>
+                        <li><strong>student</strong> - John Student (password123)</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+        function showSystemOverview() {
+            const content = document.getElementById('dashboardContent');
+            content.innerHTML = `
+                <h3>System Overview</h3>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">👥</div>
+                        <h3>3</h3>
+                        <p>Total Users</p>
+                        <small>Students: 1 | Lecturers: 1 | Admins: 1</small>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">📚</div>
+                        <h3>0</h3>
+                        <p>Total Assignments</p>
+                        <small>Active templates</small>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🔗</div>
+                        <h3>Online</h3>
+                        <p>System Status</p>
+                        <small>All systems operational</small>
+                    </div>
+                </div>
+                
+                <div class="system-health" style="margin-top: 2rem;">
+                    <h4>System Health</h4>
+                    <div class="health-indicators">
+                        <p><strong>Database Status:</strong> <span style="color: #10b981;">Connected ✅</span></p>
+                        <p><strong>Blockchain Network:</strong> <span style="color: #10b981;">Active ✅</span></p>
+                        <p><strong>File Storage:</strong> <span style="color: #10b981;">Online ✅</span></p>
+                        <p><strong>API Services:</strong> <span style="color: #10b981;">Operational ✅</span></p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Event Handlers
+        function handleCreateAssignment(event) {
+            event.preventDefault();
+            showMessage('Assignment creation functionality will be implemented when backend is available.', 'info');
+        }
+
+        function showAddUserForm() {
+            showMessage('User management functionality will be implemented when backend is available.', 'info');
+        }
+
+        function exportUserList() {
+            showMessage('Export functionality will be implemented when backend is available.', 'info');
+        }
+
+        function submitContact(event) {
+            event.preventDefault();
+            showMessage('Thank you for your message! We will get back to you soon.', 'success');
+            event.target.reset();
+        }
+
+        // Message System
+        function showMessage(message, type) {
+            // Remove any existing messages
+            const existingMsg = document.querySelector('.message');
+            if (existingMsg) {
+                existingMsg.remove();
+            }
+            
+            // Create new message
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            
+            // Insert at top of page
+            document.body.appendChild(messageDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.remove();
+                }
+            }, 30000);
+        }
+    </script>
 </body>
 </html>

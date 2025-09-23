@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduChain - Blockchain Assignment Management</title>
+    <script defer src="app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* CSS from your original file */
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        #metamask-status { margin-left: 1em; font-weight: bold; }
+        #account-address { margin-top: 1em; color: #333; }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Navigation */
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .nav-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .nav-menu {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-link:hover {
+            color: #667eea;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            transition: all 0.3s;
+            margin-right: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .btn-secondary:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+
+        .btn-success {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #45a049;
+        }
+
+        .btn-warning {
+            background-color: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background-color: #f57c00;
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 4rem 0;
+            color: white;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        /* Features Section */
+        .features {
+            background: white;
+            padding: 4rem 0;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .feature-card {
+            background: #f8f9ff;
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid #e0e7ff;
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Auth Forms */
+        .auth-container {
+            background: white;
+            max-width: 400px;
+            margin: 2rem auto;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-input,
+        .form-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 0.25rem;
+            color: #666;
+            font-size: 0.875rem;
+        }
+
+        /* Dashboard */
+        .dashboard {
+            background: white;
+            margin: 2rem auto;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .dashboard-nav {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .dashboard-btn {
+            padding: 0.75rem 1.5rem;
+            background: #f8f9ff;
+            border: 2px solid #e0e7ff;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #667eea;
+            transition: all 0.3s;
+        }
+
+        .dashboard-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .dashboard-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        /* Status Messages */
+        .status-message {
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+
+        .status-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        .status-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+        }
+
+        .status-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+
+        /* Status Badges */
+        .status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-submitted {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status-graded {
+            background-color: #e8f5e8;
+            color: #388e3c;
+        }
+
+        .status-pending {
+            background-color: #fff3e0;
+            color: #f57c00;
+        }
+
+        .status-late {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+
+        .status-default {
+            background-color: #f5f5f5;
+            color: #666;
+        }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .data-table th {
+            background: #667eea;
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .data-table td {
+            padding: 1rem;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9ff;
+        }
+
+        /* Lecturer Controls */
+        .lecturer-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .filter-controls select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .view-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Assignments Table */
+        .assignments-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .assignments-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .assignments-table th {
+            background: #4CAF50;
+            color: white;
+            padding: 1rem 0.75rem;
+            font-weight: 600;
+            text-align: left;
+            border-bottom: 2px solid #45a049;
+        }
+
+        .assignments-table td {
+            padding: 1rem 0.75rem;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+        }
+
+        .assignments-table tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        /* Student Info */
+        .student-info strong {
+            display: block;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .student-info small {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        /* Assignment Info */
+        .assignment-info strong {
+            display: block;
+            color: #333;
+            margin-bottom: 0.25rem;
+        }
+
+        .assignment-info small {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        /* Course Badge */
+        .course-badge {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        /* Grade Display */
+        .grade-display {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #4CAF50;
+            background: #e8f5e8;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+        }
+
+        .no-grade {
+            color: #666;
+            font-style: italic;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+
+        .action-buttons .btn {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        /* Submissions Grid */
+        .submissions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .submission-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e1e5e9;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .submission-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .submission-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .submission-header h4 {
+            margin: 0;
+            color: #333;
+            font-size: 1.25rem;
+        }
+
+        .submission-details p {
+            margin: 0.5rem 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .submission-details strong {
+            color: #333;
+        }
+
+        .submission-actions {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+        }
+
+        /* Assignment Detail Card */
+        .assignment-detail-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #eee;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .detail-section {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+
+        .detail-section h4 {
+            margin: 0 0 1rem 0;
+            color: #4CAF50;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 0.5rem;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 1rem;
+        }
+
+        .detail-item.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .detail-item label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .description {
+            background: white;
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .grading-section {
+            background: #e8f5e8;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .grading-section h4 {
+            margin: 0 0 1rem 0;
+            color: #2e7d32;
+            font-size: 1.1rem;
+        }
+
+        .feedback {
+            background: white;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            margin: 0;
+        }
+
+        .actions {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+        }
+
+        /* No Submissions State */
+        .no-submissions {
+            text-align: center;
+            padding: 3rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Sepoli */
+        .ethereum-badge {
+    background: #627eea;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.local-badge {
+    background: #6c757d;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.blockchain-record {
+    border: 1px solid #e9ecef;
+    border-left: 4px solid #627eea;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    background: white;
+}
+
+.record-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.record-type {
+    font-weight: 600;
+    color: #495057;
+}
+
+.blockchain-hash {
+    background: #f8f9fa;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: monospace;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+.blockchain-hash:hover {
+    background: #e9ecef;
+}
+
+/* audit trail */
+        .audit-table-container {
+    overflow-x: auto;
+    margin: 1rem 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.audit-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 0.9rem;
+}
+
+.audit-table th,
+.audit-table td {
+    padding: 12px 8px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.audit-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.audit-table tr:hover {
+    background: #f8f9fa;
+}
+
+.timestamp-cell {
+    min-width: 140px;
+    font-size: 0.85em;
+}
+
+.user-cell .user-name {
+    font-weight: 500;
+}
+
+.user-cell .user-id {
+    display: block;
+    color: #666;
+    font-size: 0.75em;
+}
+
+.action-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+.status-success { background: #d4edda; color: #155724; }
+.status-error { background: #f8d7da; color: #721c24; }
+.status-warning { background: #fff3cd; color: #856404; }
+.status-info { background: #d1ecf1; color: #0c5460; }
+.status-normal { background: #e2e3e5; color: #383d41; }
+
+.details-cell {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.blockchain-verified {
+    color: #28a745;
+    font-size: 1.2em;
+}
+
+.audit-controls {
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.audit-stats {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.stats-row {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+        /* Modal */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+
+        /* Wallet Connection */
+        .wallet-status {
+            padding: 1rem;
+            background: #f8f9ff;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .wallet-connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .wallet-disconnected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .lecturer-controls {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+            
+            .assignments-table {
+                overflow-x: auto;
+            }
+            
+            .assignments-table table {
+                min-width: 800px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-menu {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .hero h1 {
+                font-size: 2rem;
+            }
+
+            .dashboard-header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .dashboard-nav {
+                flex-wrap: wrap;
+            }
+
+            .features-grid,
+            .submissions-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .detail-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+
+            .btn {
+                margin-bottom: 0.5rem;
+                width: 100%;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
+        .status-online { color: #10b981; }
+        .status-offline { color: #ef4444; }
+
+
+
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <div class="logo">🎓 EduChain</div>
+                <ul class="nav-menu">
+                    <li><a href="#" class="nav-link" onclick="showPage('home')">Home</a></li>
+                    <li><a href="#" class="nav-link" onclick="showPage('about')">About</a></li>
+                    <li><a href="#" class="nav-link" onclick="showPage('contact')">Contact</a></li>
+                    <li><a href="#" class="btn btn-primary" id="signinBtn" onclick="showPage('signin')">Sign In</a></li>
+                    <li><a href="#" class="btn btn-secondary hidden" id="logoutBtn" onclick="logout()">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Landing Page -->
+    <div id="homePage">
+        <section class="hero">
+            <div class="container">
+                <h1>Secure Assignment Management</h1>
+                <p>Blockchain-powered academic integrity with tamper-proof submissions</p>
+                <a href="#" class="btn btn-primary" onclick="showPage('signin')">Get Started</a>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="container">
+                <h2 style="text-align: center; margin-bottom: 1rem;">Why Choose EduChain?</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <h3>Blockchain Security</h3>
+                        <p>Immutable records ensure assignment integrity and prevent tampering</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h3>Instant Verification</h3>
+                        <p>Real-time hash verification for quick and reliable assignment checks</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">👥</div>
+                        <h3>Role-Based Access</h3>
+                        <p>Secure access control for students, lecturers, and administrators</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- About Page -->
+    <div id="aboutPage" class="hidden">
+        <div class="container">
+            <div class="auth-container" style="max-width: 800px; margin-top: 2rem;">
+                <h2>About EduChain</h2>
+                <p>EduChain is a revolutionary blockchain-based assignment management system that ensures academic integrity through cryptographic verification. Our platform provides a secure, transparent, and tamper-proof environment for educational institutions.</p>
+                
+                <h3 style="margin-top: 2rem;">Key Features:</h3>
+                <ul style="margin: 1rem 0; padding-left: 2rem;">
+                    <li>Blockchain-secured file storage with SHA-256 hashing</li>
+                    <li>MetaMask integration for secure transactions</li>
+                    <li>Role-based access control system</li>
+                    <li>Comprehensive audit trail</li>
+                    <li>Duplicate detection and prevention</li>
+                    <li>Excel export functionality for reports</li>
+                </ul>
+
+                <h3 style="margin-top: 2rem;">How It Works:</h3>
+                <p>Students upload assignments through our secure interface. Each file is hashed using SHA-256 and stored on the blockchain, creating an immutable record. Lecturers can verify submissions by comparing blockchain hashes, ensuring authenticity and preventing plagiarism.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Page -->
+    <div id="contactPage" class="hidden">
+        <div class="container">
+            <div class="auth-container">
+                <h2>Contact Us</h2>
+                <form onsubmit="submitContact(event)">
+                    <div class="form-group">
+                        <label for="contactName">Name</label>
+                        <input type="text" id="contactName" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contactEmail">Email</label>
+                        <input type="email" id="contactEmail" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="contactMessage">Message</label>
+                        <textarea id="contactMessage" class="form-input" rows="5" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Send Message</button>
+                </form>
+                
+                <div style="margin-top: 2rem; text-align: center;">
+                    <p><strong>Support Email:</strong> support@educhain.com</p>
+                    <p><strong>Phone:</strong> +1 (555) 123-4567</p>
+                    <p><strong>Office Hours:</strong> Monday - Friday, 9:00 AM - 6:00 PM</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign In Page -->
+    <div id="signinPage" class="hidden">
+        <div class="container">
+            <div class="auth-container">
+                <h2>Connect Your Wallet</h2>
+                <div class="wallet-status" id="walletStatus">
+                    <span>MetaMask: Not Connected</span>
+                    <button class="btn btn-primary" id="walletBtn">Connect Wallet</button>
+                </div>
+                <form id="signInForm" class="hidden" onsubmit="login(event)">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="userRole">Role</label>
+                        <select id="userRole" class="form-select" required>
+                            <option value="">Select Role</option>
+                            <option value="student">Student</option>
+                            <option value="lecturer">Lecturer</option>
+                            <option value="admin">Administrator</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboardPage" class="hidden">
+        <div class="container">
+            <div class="dashboard">
+                <div class="dashboard-header">
+                    <div>
+                        <h2 id="dashboardTitle">Dashboard</h2>
+                        <p id="dashboardSubtitle">Welcome back!</p>
+                    </div>
+                    <div>
+                        <span id="userInfo"></span>
+                    </div>
+                </div>
+
+                <!-- Dashboard Navigation -->
+                <div class="dashboard-nav" id="dashboardNav">
+                    <!-- Dynamic navigation based on role -->
+                </div>
+
+                <!-- Dashboard Content -->
+                <div id="dashboardContent">
+                    <!-- Dynamic content based on selected section -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div id="modalContent">
+                <!-- Dynamic modal content -->
+            </div>
+        </div>
+    </div>
+</body>
+</html>
