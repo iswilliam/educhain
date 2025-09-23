@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const app = express();
 
+<<<<<<< HEAD
 const Web3 = require('web3');
 
 // Initialize Web3
@@ -171,6 +172,8 @@ if (process.env.PRIVATE_KEY) {
   web3.eth.accounts.wallet.add(account);
 }
 
+=======
+>>>>>>> parent of 63c7f64 (25th editted index.js/index.html/app.js)
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
@@ -325,54 +328,6 @@ async function createBlockchainRecord(recordType, recordId, data) {
   const blockNumber = lastRecord ? lastRecord.blockNumber + 1 : 1;
   const previousHash = lastRecord ? lastRecord.dataHash : '0';
   
-  // Create description
-  let description = '';
-  switch (recordType) {
-    case 'assignment_template':
-      description = `Assignment: ${data.title} (${data.courseCode}) created by ${data.createdBy}`;
-      break;
-    case 'submission':
-      description = `Submission by ${data.studentName} for assignment`;
-      break;
-    case 'grade':
-      description = `Grade ${data.marks} assigned by ${data.gradedBy} for ${data.assignmentTitle}`;
-      break;
-    default:
-      description = `${recordType} record created`;
-  }
-  
-  let ethereumTxHash = null;
-  let ethereumVerified = false;
-  
-  // Store on Ethereum Sepolia
-  try {
-    if (account && process.env.CONTRACT_ADDRESS) {
-      console.log('Storing on Ethereum...');
-      
-      const gasEstimate = await contract.methods.storeRecord(dataHash, description).estimateGas({
-        from: account.address
-      });
-      
-      const gasPrice = await web3.eth.getGasPrice();
-      
-      const result = await contract.methods.storeRecord(dataHash, description).send({
-        from: account.address,
-        gas: Math.floor(gasEstimate * 1.2),
-        gasPrice: gasPrice
-      });
-      
-      ethereumTxHash = result.transactionHash;
-      ethereumVerified = true;
-      
-      console.log(`Stored on Ethereum: ${ethereumTxHash}`);
-    } else {
-      throw new Error('No private key or contract address configured');
-    }
-  } catch (ethError) {
-    console.error('Ethereum storage failed:', ethError.message);
-    // Don't fail the entire operation, just log the error
-  }
-  
   const blockchainRecord = new BlockchainRecord({
     recordType,
     recordId,
@@ -380,10 +335,7 @@ async function createBlockchainRecord(recordType, recordId, data) {
     previousHash,
     blockNumber,
     nonce: crypto.randomBytes(16).toString('hex'),
-    merkleRoot: generateMerkleRoot([dataHash, previousHash]),
-    ethereumTxHash,
-    ethereumVerified,
-    description
+    merkleRoot: generateMerkleRoot([dataHash, previousHash])
   });
   
   await blockchainRecord.save();
@@ -628,16 +580,36 @@ app.post('/api/assignments/template', async (req, res) => {
   }
 });
 
+// Add after your existing routes
 app.post('/api/blockchain/verify', async (req, res) => {
   try {
     const { hash, recordId, type } = req.body;
     
-    // Find blockchain record
+    // First, verify the record exists in database
+    let dbRecord;
+    if (type === 'assignment_template') {
+      dbRecord = await AssignmentTemplate.findById(recordId);
+    } else if (type === 'submission') {
+      dbRecord = await Submission.findById(recordId);
+    } else {
+      dbRecord = await BlockchainRecord.findOne({ dataHash: hash });
+    }
+    
+    if (!dbRecord) {
+      return res.json({ success: false, error: 'Record not found in database' });
+    }
+    
+    // Verify hash matches
+    const recordHash = dbRecord.blockchainHash || dbRecord.dataHash || hash;
+    if (recordHash !== hash) {
+      return res.json({ success: false, error: 'Hash mismatch - record may be tampered' });
+    }
+    
+    // Find corresponding blockchain record
     const blockchainRecord = await BlockchainRecord.findOne({ 
       $or: [
         { recordId: recordId },
-        { dataHash: hash },
-        { ethereumTxHash: hash }
+        { dataHash: hash }
       ]
     });
     
@@ -657,58 +629,31 @@ app.post('/api/blockchain/verify', async (req, res) => {
       }
     }
     
-    // Real Ethereum verification
+    // Try Ethereum Sepolia verification
     let ethereumVerified = false;
-    let ethereumDetails = null;
-    
-    if (blockchainRecord.ethereumTxHash) {
-      try {
-        const [transaction, receipt] = await Promise.all([
-          web3.eth.getTransaction(blockchainRecord.ethereumTxHash),
-          web3.eth.getTransactionReceipt(blockchainRecord.ethereumTxHash)
-        ]);
-        
-        if (transaction && receipt) {
-          ethereumVerified = receipt.status === true || receipt.status === '0x1';
-          
-          // Get contract data to verify the hash was actually stored
-          let contractVerified = false;
-          try {
-            const contractRecord = await contract.methods.getRecord(blockchainRecord.dataHash).call();
-            contractVerified = contractRecord && contractRecord[0] === blockchainRecord.dataHash;
-          } catch (contractError) {
-            console.log('Contract verification failed:', contractError.message);
-          }
-          
-          ethereumDetails = {
-            transactionHash: blockchainRecord.ethereumTxHash,
-            blockNumber: transaction.blockNumber,
-            gasUsed: receipt.gasUsed.toString(),
-            status: ethereumVerified ? 'Success' : 'Failed',
-            explorerUrl: `https://sepolia.etherscan.io/tx/${blockchainRecord.ethereumTxHash}`,
-            contractVerified,
-            from: transaction.from,
-            to: transaction.to
-          };
-        }
-      } catch (ethError) {
-        console.error('Ethereum verification failed:', ethError.message);
+    try {
+      const Web3 = require('web3');
+      const web3 = new Web3('https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432');
+      
+      // Check if it's a valid transaction hash format
+      if (hash.length === 66 && hash.startsWith('0x')) {
+        const transaction = await web3.eth.getTransaction(hash);
+        ethereumVerified = !!(transaction && transaction.blockNumber);
       }
+    } catch (ethError) {
+      console.log('Ethereum verification failed:', ethError.message);
     }
     
     res.json({
       success: true,
-      verified: chainValid && ethereumVerified,
+      verified: chainValid,
       ethereumVerified,
-      ethereumDetails,
       blockchainRecord: {
         dataHash: blockchainRecord.dataHash,
         blockNumber: blockchainRecord.blockNumber,
         timestamp: blockchainRecord.timestamp,
         recordType: blockchainRecord.recordType,
-        description: blockchainRecord.description,
-        verified: blockchainRecord.verified && chainValid,
-        ethereumTxHash: blockchainRecord.ethereumTxHash
+        verified: blockchainRecord.verified && chainValid
       },
       chainIntegrity: chainValid
     });
