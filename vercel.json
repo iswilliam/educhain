@@ -28,7 +28,7 @@
   "env": {
     "MONGODB_URI": "mongodb+srv://nounproject1:nounproject1@cluster0.qp5qs66.mongodb.net/educhain?retryWrites=true&w=majority&appName=Cluster0",
     "NODE_ENV": "production",
-    "CONTRACT_ADDRESS": "0x8aC25ef0631d796Cf43C102D5eC1FA0a44e207d6",
+    "CONTRACT_ADDRESS": "0xe85CCDB470865d8dd032D78680e53228C4bf6378",
     "PRIVATE_KEY": "5e29c565d6819fa0aebb07f32a21c5715dc83c7c3b10cdea4230bfd7187b4ace",
     "SEPOLIA_RPC_URL": "https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432"
   }

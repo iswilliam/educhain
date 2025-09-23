@@ -1,3 +1,218 @@
+// ABI new code
+[
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			}
+		],
+		"name": "addAuthorizedUser",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "hash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "recordType",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "dataHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "previousHash",
+				"type": "string"
+			}
+		],
+		"name": "createRecord",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "string",
+				"name": "hash",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "recordType",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			}
+		],
+		"name": "RecordCreated",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "authorizedUsers",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "recordHashes",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "records",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "recordType",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "dataHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "previousHash",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "blockNumber",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "hash",
+				"type": "string"
+			}
+		],
+		"name": "verifyRecord",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			},
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "recordType",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "dataHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "previousHash",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "blockNumber",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					}
+				],
+				"internalType": "struct EduChain.Record",
+				"name": "",
+				"type": "tuple"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
+
+
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -7,7 +222,218 @@ const fs = require('fs');
 const crypto = require('crypto');
 const Web3 = require('web3');
 require('dotenv').config();
-
+// ABI new code
+[
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "user",
+				"type": "address"
+			}
+		],
+		"name": "addAuthorizedUser",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "hash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "recordType",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "dataHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "previousHash",
+				"type": "string"
+			}
+		],
+		"name": "createRecord",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "string",
+				"name": "hash",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "recordType",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			}
+		],
+		"name": "RecordCreated",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "authorizedUsers",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "recordHashes",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"name": "records",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "recordType",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "dataHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "previousHash",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "blockNumber",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "hash",
+				"type": "string"
+			}
+		],
+		"name": "verifyRecord",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			},
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "recordType",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "dataHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "previousHash",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "blockNumber",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					}
+				],
+				"internalType": "struct EduChain.Record",
+				"name": "",
+				"type": "tuple"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
 const app = express();
 
 // Middleware
@@ -139,24 +565,15 @@ const BlockchainRecord = mongoose.model('BlockchainRecord', blockchainRecordSche
 const User = mongoose.model('User', userSchema);
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 
-// Blockchain Helper Functions
-function generateHash(data) {
-  return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
-}
+// Initialize Web3 and Contract
+const web3 = new Web3(process.env.SEPOLIA_RPC_URL);
+const contract = new web3.eth.Contract(CONTRACT_ABI, process.env.CONTRACT_ADDRESS);
 
-function generateMerkleRoot(hashes) {
-  if (hashes.length === 0) return '';
-  if (hashes.length === 1) return hashes[0];
-  
-  const newHashes = [];
-  for (let i = 0; i < hashes.length; i += 2) {
-    const left = hashes[i];
-    const right = i + 1 < hashes.length ? hashes[i + 1] : left;
-    newHashes.push(crypto.createHash('sha256').update(left + right).digest('hex'));
-  }
-  
-  return generateMerkleRoot(newHashes);
-}
+
+// Blockchain Helper Functions
+// function generateHash(data) {
+//   return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+// }
 
 async function createBlockchainRecord(recordType, recordId, data) {
   const dataHash = generateHash(data);
@@ -164,19 +581,59 @@ async function createBlockchainRecord(recordType, recordId, data) {
   const blockNumber = lastRecord ? lastRecord.blockNumber + 1 : 1;
   const previousHash = lastRecord ? lastRecord.dataHash : '0';
   
-  const blockchainRecord = new BlockchainRecord({
+  const recordHash = generateHash({
     recordType,
-    recordId,
+    recordId: recordId.toString(),
     dataHash,
     previousHash,
-    blockNumber,
-    nonce: crypto.randomBytes(16).toString('hex'),
-    merkleRoot: generateMerkleRoot([dataHash, previousHash])
+    timestamp: Date.now()
   });
   
-  await blockchainRecord.save();
-  return blockchainRecord;
+  try {
+    // Create blockchain transaction FIRST
+    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
+    web3.eth.accounts.wallet.add(account);
+    
+    const tx = contract.methods.createRecord(
+      recordHash,
+      recordType,
+      dataHash,
+      previousHash
+    );
+    
+    const gas = await tx.estimateGas({ from: account.address });
+    const gasPrice = await web3.eth.getGasPrice();
+    
+    const receipt = await tx.send({
+      from: account.address,
+      gas: Math.floor(gas * 1.2),
+      gasPrice: gasPrice
+    });
+    
+    // Only save to local database if blockchain transaction succeeded
+    const blockchainRecord = new BlockchainRecord({
+      recordType,
+      recordId,
+      dataHash,
+      previousHash,
+      blockNumber,
+      merkleRoot: recordHash,
+      nonce: receipt.transactionHash,
+      verified: true
+    });
+    
+    await blockchainRecord.save();
+    return blockchainRecord;
+    
+  } catch (error) {
+    console.error('Blockchain transaction failed:', error);
+    // Don't save to local storage if blockchain fails
+    throw new Error('Failed to create blockchain record: ' + error.message);
+  }
 }
+
+
+
 
 async function logActivity(userId, userName, action, details, resourceType, resourceId, ipAddress, metadata = {}, userAgent = '', sessionId = '') {
   try {
@@ -427,71 +884,101 @@ app.post('/api/blockchain/verify', async (req, res) => {
       dbRecord = await AssignmentTemplate.findById(recordId);
     } else if (type === 'submission') {
       dbRecord = await Submission.findById(recordId);
-    } else {
-      dbRecord = await BlockchainRecord.findOne({ dataHash: hash });
     }
     
     if (!dbRecord) {
       return res.json({ success: false, error: 'Record not found in database' });
     }
     
-    // Verify hash matches
-    const recordHash = dbRecord.blockchainHash || dbRecord.dataHash || hash;
-    if (recordHash !== hash) {
-      return res.json({ success: false, error: 'Hash mismatch - record may be tampered' });
-    }
+    const recordHash = dbRecord.blockchainHash || hash;
     
-    // Find corresponding blockchain record
-    const blockchainRecord = await BlockchainRecord.findOne({ 
+    // Find corresponding blockchain record in local storage
+    const localRecord = await BlockchainRecord.findOne({ 
       $or: [
         { recordId: recordId },
-        { dataHash: hash }
+        { dataHash: recordHash },
+        { merkleRoot: recordHash }
       ]
     });
     
-    if (!blockchainRecord) {
-      return res.json({ success: false, error: 'Blockchain record not found' });
+    if (!localRecord) {
+      return res.json({ success: false, error: 'Local blockchain record not found' });
     }
     
-    // Verify chain integrity
+    // Verify on Sepolia network
+    let contractVerified = false;
+    let contractRecord = null;
+    
+    try {
+      const result = await contract.methods.verifyRecord(recordHash).call();
+      contractVerified = result[0];
+      if (contractVerified) {
+        contractRecord = result[1];
+      }
+    } catch (contractError) {
+      return res.json({ 
+        success: false, 
+        error: 'Smart contract verification failed: ' + contractError.message 
+      });
+    }
+    
+    if (!contractVerified) {
+      return res.json({ 
+        success: false, 
+        error: 'Record not found on Sepolia blockchain' 
+      });
+    }
+    
+    // Compare local storage with blockchain data
+    const dataMatches = localRecord.dataHash === contractRecord.dataHash;
+    const typeMatches = localRecord.recordType === contractRecord.recordType;
+    
+    // Verify chain integrity in local storage
     let chainValid = true;
-    if (blockchainRecord.blockNumber > 1) {
+    if (localRecord.blockNumber > 1) {
       const previousRecord = await BlockchainRecord.findOne({
-        blockNumber: blockchainRecord.blockNumber - 1
+        blockNumber: localRecord.blockNumber - 1
       });
       
-      if (!previousRecord || blockchainRecord.previousHash !== previousRecord.dataHash) {
+      if (!previousRecord || localRecord.previousHash !== previousRecord.dataHash) {
         chainValid = false;
       }
     }
     
-    // Try Ethereum Sepolia verification
-    let ethereumVerified = false;
-    try {
-      const Web3 = require('web3');
-      const web3 = new Web3('https://sepolia.infura.io/v3/4bde9e9fe8b940be8983f49eb61d4432');
-      
-      // Check if it's a valid transaction hash format
-      if (hash.length === 66 && hash.startsWith('0x')) {
-        const transaction = await web3.eth.getTransaction(hash);
-        ethereumVerified = !!(transaction && transaction.blockNumber);
-      }
-    } catch (ethError) {
-      console.log('Ethereum verification failed:', ethError.message);
-    }
+    const fullVerification = contractVerified && dataMatches && typeMatches && chainValid;
     
     res.json({
       success: true,
-      verified: chainValid,
-      ethereumVerified,
-      blockchainRecord: {
-        dataHash: blockchainRecord.dataHash,
-        blockNumber: blockchainRecord.blockNumber,
-        timestamp: blockchainRecord.timestamp,
-        recordType: blockchainRecord.recordType,
-        verified: blockchainRecord.verified && chainValid
+      verified: fullVerification,
+      contractVerified,
+      dataMatches,
+      typeMatches,
+      chainIntegrity: chainValid,
+      localRecord: {
+        dataHash: localRecord.dataHash,
+        blockNumber: localRecord.blockNumber,
+        timestamp: localRecord.timestamp,
+        recordType: localRecord.recordType,
+        transactionHash: localRecord.nonce
       },
-      chainIntegrity: chainValid
+      contractRecord: {
+        dataHash: contractRecord.dataHash,
+        recordType: contractRecord.recordType,
+        blockNumber: contractRecord.blockNumber.toString(),
+        timestamp: new Date(contractRecord.timestamp * 1000).toISOString(),
+        creator: contractRecord.creator
+      },
+      verification: {
+        message: fullVerification 
+          ? 'Local storage and blockchain data match perfectly' 
+          : 'Verification failed - data mismatch detected',
+        details: {
+          contractFound: contractVerified,
+          dataMatch: dataMatches,
+          typeMatch: typeMatches,
+          chainIntegrity: chainValid
+        }
+      }
     });
     
   } catch (error) {
