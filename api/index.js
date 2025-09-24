@@ -565,26 +565,53 @@ const BlockchainRecord = mongoose.model('BlockchainRecord', blockchainRecordSche
 const User = mongoose.model('User', userSchema);
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 
-// Initialize Web3 and Contract (Non-blocking)
+// Initialize Web3 and Contract (More robust initialization)
 let web3, contract;
 let blockchainEnabled = false;
 
 async function initializeBlockchain() {
   try {
+    console.log('Initializing blockchain connection...');
+    console.log('RPC URL:', process.env.SEPOLIA_RPC_URL ? 'Set' : 'Missing');
+    console.log('Contract Address:', process.env.CONTRACT_ADDRESS ? 'Set' : 'Missing');
+    
+    if (!process.env.SEPOLIA_RPC_URL || !process.env.CONTRACT_ADDRESS || !process.env.PRIVATE_KEY) {
+      throw new Error('Missing required environment variables');
+    }
+    
     web3 = new Web3(process.env.SEPOLIA_RPC_URL);
+    
+    // Test connection with timeout
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Connection timeout')), 10000)
+    );
+    
+    const blockNumber = await Promise.race([
+      web3.eth.getBlockNumber(),
+      timeoutPromise
+    ]);
+    
+    console.log('Connected to Sepolia, latest block:', blockNumber);
+    
+    // Test private key
+    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
+    console.log('Account address:', account.address);
+    
+    // Initialize contract
     contract = new web3.eth.Contract(CONTRACT_ABI, process.env.CONTRACT_ADDRESS);
     
-    // Test connection
-    await web3.eth.getBlockNumber();
     blockchainEnabled = true;
     console.log('✅ Blockchain connection established');
+    
   } catch (error) {
     console.error('❌ Blockchain initialization failed:', error.message);
     blockchainEnabled = false;
+    web3 = null;
+    contract = null;
   }
 }
 
-// Initialize blockchain connection but don't block server startup
+// Initialize but don't block server startup
 initializeBlockchain();
 
 
@@ -1022,6 +1049,28 @@ app.get('/api/blockchain/status', (req, res) => {
     contractAddress: process.env.CONTRACT_ADDRESS ? 'Set' : 'Not set',
     privateKey: process.env.PRIVATE_KEY ? 'Set' : 'Not set'
   });
+});
+
+app.get('/api/blockchain/test', async (req, res) => {
+  try {
+    if (!blockchainEnabled) {
+      return res.json({ success: false, error: 'Blockchain not initialized' });
+    }
+    
+    const blockNumber = await web3.eth.getBlockNumber();
+    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
+    const balance = await web3.eth.getBalance(account.address);
+    
+    res.json({
+      success: true,
+      blockNumber,
+      accountAddress: account.address,
+      balance: web3.utils.fromWei(balance, 'ether') + ' ETH',
+      contractAddress: process.env.CONTRACT_ADDRESS
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Get assignment templates (for students to view available assignments)
