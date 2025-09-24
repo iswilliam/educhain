@@ -1073,6 +1073,36 @@ app.get('/api/blockchain/test', async (req, res) => {
   }
 });
 
+app.get('/api/blockchain/rpc-test', async (req, res) => {
+  try {
+    const Web3 = require('web3');
+    
+    console.log('Testing RPC URL:', process.env.SEPOLIA_RPC_URL);
+    
+    // Try different ways to connect
+    const web3 = new Web3(process.env.SEPOLIA_RPC_URL);
+    
+    // Test with a simple call
+    const blockNumber = await web3.eth.getBlockNumber();
+    
+    res.json({
+      success: true,
+      rpcUrl: process.env.SEPOLIA_RPC_URL,
+      blockNumber,
+      message: 'RPC connection successful'
+    });
+    
+  } catch (error) {
+    console.error('RPC test failed:', error);
+    res.json({
+      success: false,
+      error: error.message,
+      rpcUrl: process.env.SEPOLIA_RPC_URL,
+      stack: error.stack
+    });
+  }
+});
+
 // Get assignment templates (for students to view available assignments)
 app.get('/api/assignments/templates', async (req, res) => {
   try {
