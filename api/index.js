@@ -573,24 +573,17 @@ async function initializeBlockchain() {
   console.log('Starting blockchain initialization...');
   
   try {
-    if (!process.env.SEPOLIA_RPC_URL) {
-      throw new Error('SEPOLIA_RPC_URL not set');
-    }
-    if (!process.env.CONTRACT_ADDRESS) {
-      throw new Error('CONTRACT_ADDRESS not set');
-    }
-    if (!process.env.PRIVATE_KEY) {
-      throw new Error('PRIVATE_KEY not set');
+    if (!process.env.SEPOLIA_RPC_URL || !process.env.CONTRACT_ADDRESS || !process.env.PRIVATE_KEY) {
+      throw new Error('Missing required environment variables');
     }
     
     console.log('Environment variables check passed');
     
-    // Initialize Web3 with correct syntax
     web3 = new Web3(process.env.SEPOLIA_RPC_URL);
     console.log('Web3 initialized');
     
     const blockNumber = await web3.eth.getBlockNumber();
-    console.log('Connected to Sepolia, block:', blockNumber);
+    console.log('Connected to Sepolia, block:', blockNumber.toString()); // Convert BigInt
     
     const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
     console.log('Account loaded:', account.address);
@@ -608,8 +601,6 @@ async function initializeBlockchain() {
     contract = null;
   }
 }
-
-initializeBlockchain();
 
 
 // Blockchain Helper Functions
@@ -1060,7 +1051,7 @@ app.get('/api/blockchain/test', async (req, res) => {
     
     res.json({
       success: true,
-      blockNumber,
+      blockNumber: blockNumber.toString(), // Convert BigInt to string
       accountAddress: account.address,
       balance: web3.utils.fromWei(balance, 'ether') + ' ETH',
       contractAddress: process.env.CONTRACT_ADDRESS
@@ -1072,7 +1063,7 @@ app.get('/api/blockchain/test', async (req, res) => {
 
 app.get('/api/blockchain/rpc-test', async (req, res) => {
   try {
-    const { Web3 } = require('web3'); // Correct import for v4.16.0
+    const { Web3 } = require('web3');
     
     console.log('Testing RPC URL:', process.env.SEPOLIA_RPC_URL);
     
@@ -1083,7 +1074,7 @@ app.get('/api/blockchain/rpc-test', async (req, res) => {
     res.json({
       success: true,
       rpcUrl: process.env.SEPOLIA_RPC_URL,
-      blockNumber,
+      blockNumber: blockNumber.toString(), // Convert BigInt to string
       message: 'RPC connection successful'
     });
     
@@ -1092,8 +1083,7 @@ app.get('/api/blockchain/rpc-test', async (req, res) => {
     res.json({
       success: false,
       error: error.message,
-      rpcUrl: process.env.SEPOLIA_RPC_URL,
-      stack: error.stack
+      rpcUrl: process.env.SEPOLIA_RPC_URL
     });
   }
 });
