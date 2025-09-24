@@ -220,7 +220,7 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const crypto = require('crypto');
-const Web3 = require('web3');
+const { Web3 } = require('web3');
 require('dotenv').config();
 // ABI new code
 [
@@ -570,48 +570,45 @@ let web3, contract;
 let blockchainEnabled = false;
 
 async function initializeBlockchain() {
+  console.log('Starting blockchain initialization...');
+  
   try {
-    console.log('Initializing blockchain connection...');
-    console.log('RPC URL:', process.env.SEPOLIA_RPC_URL ? 'Set' : 'Missing');
-    console.log('Contract Address:', process.env.CONTRACT_ADDRESS ? 'Set' : 'Missing');
-    
-    if (!process.env.SEPOLIA_RPC_URL || !process.env.CONTRACT_ADDRESS || !process.env.PRIVATE_KEY) {
-      throw new Error('Missing required environment variables');
+    if (!process.env.SEPOLIA_RPC_URL) {
+      throw new Error('SEPOLIA_RPC_URL not set');
+    }
+    if (!process.env.CONTRACT_ADDRESS) {
+      throw new Error('CONTRACT_ADDRESS not set');
+    }
+    if (!process.env.PRIVATE_KEY) {
+      throw new Error('PRIVATE_KEY not set');
     }
     
+    console.log('Environment variables check passed');
+    
+    // Initialize Web3 with correct syntax
     web3 = new Web3(process.env.SEPOLIA_RPC_URL);
+    console.log('Web3 initialized');
     
-    // Test connection with timeout
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Connection timeout')), 10000)
-    );
+    const blockNumber = await web3.eth.getBlockNumber();
+    console.log('Connected to Sepolia, block:', blockNumber);
     
-    const blockNumber = await Promise.race([
-      web3.eth.getBlockNumber(),
-      timeoutPromise
-    ]);
-    
-    console.log('Connected to Sepolia, latest block:', blockNumber);
-    
-    // Test private key
     const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
-    console.log('Account address:', account.address);
+    console.log('Account loaded:', account.address);
     
-    // Initialize contract
     contract = new web3.eth.Contract(CONTRACT_ABI, process.env.CONTRACT_ADDRESS);
+    console.log('Contract initialized at:', process.env.CONTRACT_ADDRESS);
     
     blockchainEnabled = true;
-    console.log('✅ Blockchain connection established');
+    console.log('Blockchain initialization successful');
     
   } catch (error) {
-    console.error('❌ Blockchain initialization failed:', error.message);
+    console.error('Blockchain initialization failed:', error.message);
     blockchainEnabled = false;
     web3 = null;
     contract = null;
   }
 }
 
-// Initialize but don't block server startup
 initializeBlockchain();
 
 
@@ -1075,14 +1072,12 @@ app.get('/api/blockchain/test', async (req, res) => {
 
 app.get('/api/blockchain/rpc-test', async (req, res) => {
   try {
-    const Web3 = require('web3');
+    const { Web3 } = require('web3'); // Correct import for v4.16.0
     
     console.log('Testing RPC URL:', process.env.SEPOLIA_RPC_URL);
     
-    // Try different ways to connect
     const web3 = new Web3(process.env.SEPOLIA_RPC_URL);
     
-    // Test with a simple call
     const blockNumber = await web3.eth.getBlockNumber();
     
     res.json({
