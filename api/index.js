@@ -245,32 +245,76 @@ let web3, contract;
 let blockchainEnabled = false;
 
 async function initializeBlockchain() {
-  console.log('Starting blockchain initialization...');
+  console.log('=== Starting blockchain initialization ===');
   
   try {
-    if (!process.env.SEPOLIA_RPC_URL || !process.env.CONTRACT_ADDRESS || !process.env.PRIVATE_KEY) {
-      throw new Error('Missing required environment variables');
+    // Check each environment variable individually
+    console.log('Checking environment variables...');
+    console.log('SEPOLIA_RPC_URL exists:', !!process.env.SEPOLIA_RPC_URL);
+    console.log('CONTRACT_ADDRESS exists:', !!process.env.CONTRACT_ADDRESS);
+    console.log('PRIVATE_KEY exists:', !!process.env.PRIVATE_KEY);
+    
+    if (!process.env.SEPOLIA_RPC_URL) {
+      throw new Error('SEPOLIA_RPC_URL not set');
+    }
+    if (!process.env.CONTRACT_ADDRESS) {
+      throw new Error('CONTRACT_ADDRESS not set');
+    }
+    if (!process.env.PRIVATE_KEY) {
+      throw new Error('PRIVATE_KEY not set');
     }
     
     console.log('Environment variables check passed');
+    console.log('RPC URL:', process.env.SEPOLIA_RPC_URL);
+    console.log('Contract Address:', process.env.CONTRACT_ADDRESS);
     
+    // Test Web3 initialization
+    console.log('Initializing Web3...');
     web3 = new Web3(process.env.SEPOLIA_RPC_URL);
-    console.log('Web3 initialized');
+    console.log('Web3 initialized successfully');
+    
+    // Test network connection
+    console.log('Testing network connection...');
+    const networkId = await web3.eth.net.getId();
+    console.log('Network ID:', networkId.toString());
     
     const blockNumber = await web3.eth.getBlockNumber();
-    console.log('Connected to Sepolia, block:', blockNumber.toString()); // Convert BigInt
+    console.log('Latest block number:', blockNumber.toString());
     
+    // Test private key
+    console.log('Testing private key...');
     const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
-    console.log('Account loaded:', account.address);
+    console.log('Account address:', account.address);
     
+    // Check account balance
+    const balance = await web3.eth.getBalance(account.address);
+    console.log('Account balance:', web3.utils.fromWei(balance, 'ether'), 'ETH');
+    
+    // Initialize contract
+    console.log('Initializing contract...');
     contract = new web3.eth.Contract(CONTRACT_ABI, process.env.CONTRACT_ADDRESS);
-    console.log('Contract initialized at:', process.env.CONTRACT_ADDRESS);
+    console.log('Contract initialized successfully');
+    
+    // Test contract connection (optional - might fail if contract not deployed)
+    try {
+      console.log('Testing contract connection...');
+      const contractCode = await web3.eth.getCode(process.env.CONTRACT_ADDRESS);
+      if (contractCode === '0x') {
+        console.log('WARNING: No contract code found at address - contract may not be deployed');
+      } else {
+        console.log('Contract code found - contract is deployed');
+      }
+    } catch (contractTestError) {
+      console.log('Contract test failed (this may be normal):', contractTestError.message);
+    }
     
     blockchainEnabled = true;
-    console.log('Blockchain initialization successful');
+    console.log('=== Blockchain initialization completed successfully ===');
     
   } catch (error) {
-    console.error('Blockchain initialization failed:', error.message);
+    console.error('=== Blockchain initialization failed ===');
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
     blockchainEnabled = false;
     web3 = null;
     contract = null;
@@ -781,6 +825,69 @@ app.get('/api/blockchain/rpc-test', async (req, res) => {
     res.json({
       success: false,
       error: error.message,
+      rpcUrl: process.env.SEPOLIA_RPC_URL
+    });
+  }
+});
+
+app.get('/api/debug/blockchain-init', async (req, res) => {
+  try {
+    // Force re-initialization for testing
+    console.log('=== FORCED RE-INITIALIZATION ===');
+    await initializeBlockchain();
+    
+    res.json({
+      success: true,
+      blockchainEnabled,
+      web3Connected: !!web3,
+      contractLoaded: !!contract,
+      rpcUrl: process.env.SEPOLIA_RPC_URL,
+      contractAddress: process.env.CONTRACT_ADDRESS,
+      privateKeyExists: !!process.env.PRIVATE_KEY,
+      message: 'Check server logs for detailed initialization output'
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      blockchainEnabled,
+      web3Connected: !!web3,
+      contractLoaded: !!contract
+    });
+  }
+});
+
+app.get('/api/debug/contract-check', async (req, res) => {
+  try {
+    if (!process.env.SEPOLIA_RPC_URL || !process.env.CONTRACT_ADDRESS) {
+      return res.json({ success: false, error: 'Missing environment variables' });
+    }
+    
+    const testWeb3 = new Web3(process.env.SEPOLIA_RPC_URL);
+    
+    // Check if contract is deployed
+    const contractCode = await testWeb3.eth.getCode(process.env.CONTRACT_ADDRESS);
+    const isDeployed = contractCode !== '0x';
+    
+    // Get network info
+    const networkId = await testWeb3.eth.net.getId();
+    const blockNumber = await testWeb3.eth.getBlockNumber();
+    
+    res.json({
+      success: true,
+      contractAddress: process.env.CONTRACT_ADDRESS,
+      contractDeployed: isDeployed,
+      contractCodeLength: contractCode.length,
+      networkId: networkId.toString(),
+      latestBlock: blockNumber.toString(),
+      rpcUrl: process.env.SEPOLIA_RPC_URL
+    });
+    
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      contractAddress: process.env.CONTRACT_ADDRESS,
       rpcUrl: process.env.SEPOLIA_RPC_URL
     });
   }
