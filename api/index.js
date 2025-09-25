@@ -273,22 +273,44 @@ async function initializeBlockchain() {
     web3 = new Web3(process.env.SEPOLIA_RPC_URL);
     console.log('Web3 initialized successfully');
     
-    // Test network connection
-    console.log('Testing network connection...');
-    const networkId = await web3.eth.net.getId();
-    console.log('Network ID:', networkId.toString());
-    
-    const blockNumber = await web3.eth.getBlockNumber();
-    console.log('Latest block number:', blockNumber.toString());
+  // Test network connection with timeout
+console.log('Testing network connection...');
+const timeoutPromise = new Promise((_, reject) => 
+  setTimeout(() => reject(new Error('Connection timeout after 40 seconds')), 40000)
+);
+
+const networkId = await Promise.race([
+  web3.eth.net.getId(),
+  timeoutPromise
+]);
+console.log('Network ID:', networkId.toString());
+
+const blockNumber = await Promise.race([
+  web3.eth.getBlockNumber(),
+  timeoutPromise
+]);
+console.log('Latest block number:', blockNumber.toString());
     
     // Test private key
-    console.log('Testing private key...');
-    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
-    console.log('Account address:', account.address);
+console.log('Testing private key...');
+// ADD THESE LINES:
+let privateKey = process.env.PRIVATE_KEY;
+if (!privateKey.startsWith('0x')) {
+  privateKey = '0x' + privateKey;
+}
+const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+console.log('Account address:', account.address);
     
-    // Check account balance
-    const balance = await web3.eth.getBalance(account.address);
-    console.log('Account balance:', web3.utils.fromWei(balance, 'ether'), 'ETH');
+// Check account balance
+try {
+  const balance = await Promise.race([
+    web3.eth.getBalance(account.address),
+    timeoutPromise
+  ]);
+  console.log('Account balance:', web3.utils.fromWei(balance, 'ether'), 'ETH');
+} catch (balanceError) {
+  console.log('Balance check failed:', balanceError.message);
+}
     
     // Initialize contract
     console.log('Initializing contract...');
@@ -321,7 +343,6 @@ async function initializeBlockchain() {
   }
 }
 
-initializeBlockchain();
 
 // ADD THIS FUNCTION HERE:
 function generateHash(data) {
@@ -499,6 +520,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/educhain'
   .then(() => {
     console.log('✅ Connected to MongoDB');
     seedDatabase();
+    initializeBlockchain();
   })
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
@@ -534,11 +556,15 @@ app.post('/api/auth/login', async (req, res) => {
       await user.save();
     }
 
-    await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'auth', user._id, req.ip, { 
-      walletAddress,
-      loginMethod: 'username_password',
-      userRole: user.role
-    }, req.get('User-Agent'));
+   try {
+  await logActivity(user._id, user.name, 'Login', `User logged in successfully`, 'auth', user._id, req.ip, { 
+    walletAddress,
+    loginMethod: 'username_password',
+    userRole: user.role
+  }, req.get('User-Agent'));
+} catch (logError) {
+  console.error('Login audit logging failed:', logError);
+}
 
     // Fix: Return user._id instead of user.id for MongoDB
     res.json({
@@ -889,6 +915,27 @@ app.get('/api/debug/contract-check', async (req, res) => {
       error: error.message,
       contractAddress: process.env.CONTRACT_ADDRESS,
       rpcUrl: process.env.SEPOLIA_RPC_URL
+    });
+  }
+});
+
+app.post('/api/debug/init-blockchain', async (req, res) => {
+  try {
+    console.log('Manual blockchain initialization requested...');
+    await initializeBlockchain();
+    
+    res.json({
+      success: true,
+      blockchainEnabled,
+      web3Connected: !!web3,
+      contractLoaded: !!contract,
+      message: 'Blockchain initialization attempted - check logs'
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      message: 'Blockchain initialization failed'
     });
   }
 });
