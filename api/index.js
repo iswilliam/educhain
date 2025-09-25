@@ -406,7 +406,7 @@ async function createBlockchainRecord(recordType, recordId, data) {
         privateKey = privateKey.trim();
         
         // Create account and add to wallet
-        const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+        const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
         web3.eth.accounts.wallet.clear(); // Clear any existing accounts
         web3.eth.accounts.wallet.add(account);
         
