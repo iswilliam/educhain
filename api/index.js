@@ -360,6 +360,8 @@ function getFormattedPrivateKey() {
 // Blockchain Helper Functions
 
 
+// Enhanced version with better error handling and BigInt safety:
+
 async function createBlockchainRecord(recordType, recordId, data) {
   const dataHash = generateHash(data);
   const lastRecord = await BlockchainRecord.findOne().sort({ blockNumber: -1 });
@@ -374,7 +376,7 @@ async function createBlockchainRecord(recordType, recordId, data) {
     timestamp: Date.now()
   });
   
-  // Always create local record first - this ensures operations don't fail
+  // Always create local record first
   const blockchainRecord = new BlockchainRecord({
     recordType,
     recordId,
@@ -389,17 +391,28 @@ async function createBlockchainRecord(recordType, recordId, data) {
   await blockchainRecord.save();
   console.log('Local blockchain record saved:', recordHash);
   
-  // Try blockchain transaction in background - don't let it block the operation
+  // Background blockchain transaction
   if (blockchainEnabled && web3 && contract) {
     setImmediate(async () => {
       try {
         console.log('Attempting blockchain transaction...');
-let privateKey = process.env.PRIVATE_KEY;
-if (!privateKey.startsWith('0x')) {
-  privateKey = '0x' + privateKey;
-}
-const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());        web3.eth.accounts.wallet.add(account);
         
+        // Validate private key
+        let privateKey = process.env.PRIVATE_KEY;
+        if (!privateKey) {
+          throw new Error('Private key not available');
+        }
+        
+        privateKey = privateKey.trim();
+        
+        // Create account and add to wallet
+        const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+        web3.eth.accounts.wallet.clear(); // Clear any existing accounts
+        web3.eth.accounts.wallet.add(account);
+        
+        console.log('Using account:', account.address);
+        
+        // Prepare contract method
         const tx = contract.methods.createRecord(
           recordHash,
           recordType,
@@ -407,31 +420,97 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
           previousHash
         );
         
-        const gas = await tx.estimateGas({ from: account.address });
-        const gasPrice = await web3.eth.getGasPrice();
+        console.log('Estimating gas...');
         
-        console.log('Sending transaction with gas:', gas, 'gasPrice:', gasPrice);
+        // Handle BigInt values safely
+        let gasEstimate, gasPrice, gas, gasPriceStr;
         
+        try {
+          // Get gas estimate
+          gasEstimate = await tx.estimateGas({ from: account.address });
+          console.log('Gas estimate (raw):', gasEstimate, typeof gasEstimate);
+          
+          // Convert BigInt to number safely
+          if (typeof gasEstimate === 'bigint') {
+            gas = Number(gasEstimate);
+          } else {
+            gas = parseInt(gasEstimate);
+          }
+          
+          // Add 20% buffer
+          gas = Math.floor(gas * 1.2);
+          
+        } catch (gasError) {
+          console.log('Gas estimation failed, using default:', gasError.message);
+          gas = 500000; // Default gas limit
+        }
+        
+        try {
+          // Get gas price
+          const gasPriceBigInt = await web3.eth.getGasPrice();
+          console.log('Gas price (raw):', gasPriceBigInt, typeof gasPriceBigInt);
+          
+          // Convert BigInt to string for transaction
+          if (typeof gasPriceBigInt === 'bigint') {
+            gasPriceStr = gasPriceBigInt.toString();
+            gasPrice = Number(gasPriceBigInt);
+          } else {
+            gasPriceStr = gasPriceBigInt.toString();
+            gasPrice = parseInt(gasPriceBigInt);
+          }
+          
+        } catch (priceError) {
+          console.log('Gas price fetch failed, using default:', priceError.message);
+          gasPriceStr = '20000000000'; // 20 gwei default
+          gasPrice = 20000000000;
+        }
+        
+        console.log('Final transaction parameters:');
+        console.log('- Gas limit:', gas);
+        console.log('- Gas price:', gasPrice);
+        console.log('- Gas price (string):', gasPriceStr);
+        
+        // Send transaction
+        console.log('Sending transaction...');
         const receipt = await tx.send({
           from: account.address,
-          gas: Math.floor(gas * 1.2),
-          gasPrice: gasPrice
+          gas: gas,
+          gasPrice: gasPriceStr
         });
         
-        console.log('Blockchain transaction successful:', receipt.transactionHash);
+        console.log('Blockchain transaction successful!');
+        console.log('Transaction hash:', receipt.transactionHash);
+        console.log('Block number:', receipt.blockNumber);
+        console.log('Gas used:', receipt.gasUsed);
         
-        // Update record with transaction hash
+        // Update local record
         blockchainRecord.nonce = receipt.transactionHash;
         blockchainRecord.verified = true;
         await blockchainRecord.save();
         
+        console.log('Local record updated with transaction hash');
+        
       } catch (error) {
-        console.error('Background blockchain transaction failed:', error.message);
-        // Don't throw - just log the error
+        console.error('=== Background blockchain transaction failed ===');
+        console.error('Error type:', error.constructor.name);
+        console.error('Error message:', error.message);
+        
+        // Log more details for debugging
+        if (error.message.includes('BigInt')) {
+          console.error('This is a BigInt conversion error');
+        } else if (error.message.includes('gas')) {
+          console.error('This is a gas-related error');
+        } else if (error.message.includes('private key') || error.message.includes('account')) {
+          console.error('This is an account/private key error');
+        } else if (error.message.includes('network') || error.message.includes('connection')) {
+          console.error('This is a network connectivity error');
+        }
+        
+        // Don't throw - operation should continue
       }
     });
   } else {
-    console.log('Blockchain not available - saving locally only');
+    console.log('Blockchain not available - using local storage only');
   }
   
   return blockchainRecord;
