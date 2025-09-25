@@ -298,7 +298,7 @@ let privateKey = process.env.PRIVATE_KEY;
 if (!privateKey.startsWith('0x')) {
   privateKey = '0x' + privateKey;
 }
-const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
 console.log('Account address:', account.address);
     
 // Check account balance
@@ -349,6 +349,14 @@ function generateHash(data) {
   return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
 }
 
+// ADD THIS HELPER FUNCTION:
+function getFormattedPrivateKey() {
+  let privateKey = process.env.PRIVATE_KEY;
+  if (!privateKey.startsWith('0x')) {
+    privateKey = '0x' + privateKey;
+  }
+  return privateKey;
+}
 // Blockchain Helper Functions
 
 
@@ -386,8 +394,11 @@ async function createBlockchainRecord(recordType, recordId, data) {
     setImmediate(async () => {
       try {
         console.log('Attempting blockchain transaction...');
-        const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
-        web3.eth.accounts.wallet.add(account);
+let privateKey = process.env.PRIVATE_KEY;
+if (!privateKey.startsWith('0x')) {
+  privateKey = '0x' + privateKey;
+}
+const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());        web3.eth.accounts.wallet.add(account);
         
         const tx = contract.methods.createRecord(
           recordHash,
