@@ -267,6 +267,38 @@
             color: white;
         }
 
+
+         /* Message System */
+        .message {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 9999;
+            max-width: 400px;
+            word-wrap: break-word;
+            animation: slideInRight 0.3s ease;
+        }
+
+        .message.success {
+            background: #10b981;
+        }
+
+        .message.error {
+            background: #ef4444;
+        }
+
+        .message.warning {
+            background: #f59e0b;
+        }
+
+        .message.info {
+            background: #3b82f6;
+        }
+        
         /* Status Messages */
         .status-message {
             padding: 1rem;

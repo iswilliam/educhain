@@ -1590,7 +1590,7 @@ function showMessage(message, type) {
         if (messageDiv.parentNode) {
             messageDiv.remove();
         }
-    }, 5000);
+    }, 30000);
 }
 
 function getStatusClass(status) {
