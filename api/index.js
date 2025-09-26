@@ -545,7 +545,7 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
         const receipt = await Promise.race([txPromise, timeoutPromise]);
         
         const endTime = Date.now();
-        const duration = (endTime - startTime) / 1000;
+        const duration = (endTime - startTime) / 120000;
         
         console.log('=== Transaction successful! ===');
         console.log('Transaction hash:', receipt.transactionHash);
@@ -562,7 +562,7 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
         
       } catch (error) {
         const endTime = Date.now();
-        const duration = (endTime - startTime) / 1000;
+        const duration = (endTime - startTime) / 120000;
         
         console.error('=== Blockchain transaction failed ===');
         console.error('Duration before failure:', duration, 'seconds');
@@ -874,97 +874,87 @@ app.post('/api/blockchain/verify', async (req, res) => {
   try {
     const { hash, recordId, type } = req.body;
     
-    // First, verify the record exists in database
-    let dbRecord;
-    if (type === 'assignment_template') {
-      dbRecord = await AssignmentTemplate.findById(recordId);
-    } else if (type === 'submission') {
-      dbRecord = await Submission.findById(recordId);
+    let localRecord;
+    
+    // If hash only is provided (from verification form)
+    if (hash && !recordId) {
+      localRecord = await BlockchainRecord.findOne({ 
+        $or: [
+          { dataHash: hash },
+          { merkleRoot: hash },
+          { nonce: hash }
+        ]
+      });
+    } else {
+      // If recordId and type provided (from specific record verification)
+      let dbRecord;
+      if (type === 'assignment_template') {
+        dbRecord = await AssignmentTemplate.findById(recordId);
+      } else if (type === 'submission') {
+        dbRecord = await Submission.findById(recordId);
+      }
+      
+      if (!dbRecord) {
+        return res.json({ success: false, error: 'Record not found in database' });
+      }
+      
+      const recordHash = dbRecord.blockchainHash || hash;
+      localRecord = await BlockchainRecord.findOne({ 
+        $or: [
+          { recordId: recordId },
+          { dataHash: recordHash },
+          { merkleRoot: recordHash }
+        ]
+      });
     }
-    
-    if (!dbRecord) {
-      return res.json({ success: false, error: 'Record not found in database' });
-    }
-    
-    const recordHash = dbRecord.blockchainHash || hash;
-    
-    // Find corresponding blockchain record in local storage
-    const localRecord = await BlockchainRecord.findOne({ 
-      $or: [
-        { recordId: recordId },
-        { dataHash: recordHash },
-        { merkleRoot: recordHash }
-      ]
-    });
     
     if (!localRecord) {
-      return res.json({ success: false, error: 'Local blockchain record not found' });
+      return res.json({ success: false, error: 'Record not found in local blockchain storage' });
     }
     
-    // Check if blockchain is available
+    // Check blockchain network availability
     if (!blockchainEnabled || !web3 || !contract) {
       return res.json({
         success: true,
         verified: false,
         contractVerified: false,
         localVerified: true,
-        blockchainRecord: {
-          dataHash: localRecord.dataHash,
-          blockNumber: localRecord.blockNumber,
+        message: 'Blockchain network unavailable - local verification only',
+        record: {
+          type: localRecord.recordType,
+          hash: localRecord.dataHash || localRecord.merkleRoot,
           timestamp: localRecord.timestamp,
-          recordType: localRecord.recordType,
-          transactionHash: localRecord.nonce
-        },
-        message: 'Blockchain network unavailable - local verification only'
+          blockNumber: localRecord.blockNumber
+        }
       });
     }
     
     // Verify on Sepolia network
     let contractVerified = false;
-    let contractRecord = null;
+    const verifyHash = localRecord.merkleRoot || localRecord.dataHash;
     
     try {
-      const result = await contract.methods.verifyRecord(recordHash).call();
+      const result = await contract.methods.verifyRecord(verifyHash).call();
       contractVerified = result[0];
-      if (contractVerified) {
-        contractRecord = result[1];
-      }
     } catch (contractError) {
       console.log('Contract verification failed:', contractError.message);
     }
     
-    // Verify chain integrity in local storage
-    let chainValid = true;
-    if (localRecord.blockNumber > 1) {
-      const previousRecord = await BlockchainRecord.findOne({
-        blockNumber: localRecord.blockNumber - 1
-      });
-      
-      if (!previousRecord || localRecord.previousHash !== previousRecord.dataHash) {
-        chainValid = false;
-      }
-    }
-    
     res.json({
       success: true,
-      verified: contractVerified && chainValid,
+      verified: contractVerified,
       contractVerified,
       localVerified: true,
-      chainIntegrity: chainValid,
-      blockchainRecord: {
-        dataHash: localRecord.dataHash,
-        blockNumber: localRecord.blockNumber,
+      record: {
+        type: localRecord.recordType,
+        hash: verifyHash,
         timestamp: localRecord.timestamp,
-        recordType: localRecord.recordType,
+        blockNumber: localRecord.blockNumber,
         transactionHash: localRecord.nonce
       },
-      contractRecord: contractRecord ? {
-        dataHash: contractRecord.dataHash,
-        recordType: contractRecord.recordType,
-        blockNumber: contractRecord.blockNumber.toString(),
-        timestamp: new Date(contractRecord.timestamp * 1000).toISOString(),
-        creator: contractRecord.creator
-      } : null
+      message: contractVerified 
+        ? 'Record verified on Sepolia blockchain' 
+        : 'Record found locally but not confirmed on blockchain'
     });
     
   } catch (error) {
