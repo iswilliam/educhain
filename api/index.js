@@ -364,6 +364,8 @@ function getFormattedPrivateKey() {
 
 // Replace your createBlockchainRecord function with this version that has timeout handling:
 
+// Replace your createBlockchainRecord function with this version that has timeout handling:
+
 async function createBlockchainRecord(recordType, recordId, data) {
   const dataHash = generateHash(data);
   const lastRecord = await BlockchainRecord.findOne().sort({ blockNumber: -1 });
@@ -415,7 +417,7 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
         try {
           const balance = await Promise.race([
             web3.eth.getBalance(account.address),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Balance check timeout')), 10000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Balance check timeout')), 120000))
           ]);
           const balanceEth = web3.utils.fromWei(balance, 'ether');
           console.log('Account balance:', balanceEth, 'ETH');
@@ -446,7 +448,7 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
         try {
           const gasEstimate = await Promise.race([
             tx.estimateGas({ from: account.address }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Gas estimation timeout')), 15000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Gas estimation timeout')), 120000))
           ]);
           
           gas = typeof gasEstimate === 'bigint' ? Number(gasEstimate) : parseInt(gasEstimate);
@@ -459,22 +461,36 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
           console.log('Using default gas:', gas);
         }
         
-        // Get gas price with timeout
+        // Get gas price with timeout and minimum enforcement
         console.log('Getting gas price...');
         let gasPriceStr;
         try {
           const gasPriceBigInt = await Promise.race([
             web3.eth.getGasPrice(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Gas price timeout')), 10000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Gas price timeout')), 120000))
           ]);
           
-          gasPriceStr = typeof gasPriceBigInt === 'bigint' ? gasPriceBigInt.toString() : gasPriceBigInt.toString();
-          console.log('Gas price:', gasPriceStr);
+          let gasPrice = typeof gasPriceBigInt === 'bigint' ? Number(gasPriceBigInt) : Number(gasPriceBigInt);
+          console.log('Network gas price:', gasPrice, 'wei');
+          
+          // Enforce minimum gas price for Sepolia (5 gwei minimum)
+          const minGasPrice = 5000000000; // 5 gwei in wei
+          if (gasPrice < minGasPrice) {
+            console.log(`Gas price too low (${gasPrice}), using minimum: ${minGasPrice}`);
+            gasPrice = minGasPrice;
+          }
+          
+          // Add 20% buffer to ensure faster mining
+          gasPrice = Math.floor(gasPrice * 1.2);
+          gasPriceStr = gasPrice.toString();
+          
+          console.log('Final gas price:', gasPriceStr, 'wei');
+          console.log('Gas price in gwei:', (gasPrice / 1000000000).toFixed(2), 'gwei');
           
         } catch (priceError) {
           console.log('Gas price fetch failed:', priceError.message);
-          gasPriceStr = '25000000000'; // 25 gwei default
-          console.log('Using default gas price:', gasPriceStr);
+          gasPriceStr = '10000000000'; // 10 gwei default - higher for reliability
+          console.log('Using default gas price:', gasPriceStr, 'wei (10 gwei)');
         }
         
         // Calculate total cost
@@ -482,25 +498,50 @@ const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
         const totalCostEth = web3.utils.fromWei(totalCostWei, 'ether');
         console.log('Estimated transaction cost:', totalCostEth, 'ETH');
         
-        // Send transaction with timeout
+        // Send transaction with timeout and detailed monitoring
         console.log('Sending transaction...');
         console.log('Transaction parameters:');
         console.log('- From:', account.address);
         console.log('- Gas:', gas);
-        console.log('- Gas Price:', gasPriceStr);
+        console.log('- Gas Price:', gasPriceStr, 'wei');
+        console.log('- Gas Price (gwei):', (parseInt(gasPriceStr) / 1000000000).toFixed(2));
         console.log('- Contract:', process.env.CONTRACT_ADDRESS);
+        console.log('- Estimated cost:', totalCostEth, 'ETH');
         
-        const txPromise = tx.send({
+        // Create transaction with event monitoring
+        const txObject = {
           from: account.address,
           gas: gas,
           gasPrice: gasPriceStr
+        };
+        
+        console.log('Creating transaction...');
+        const txPromise = tx.send(txObject)
+          .on('transactionHash', (hash) => {
+            console.log('✅ Transaction hash received:', hash);
+            console.log('⏳ Waiting for confirmation...');
+          })
+          .on('confirmation', (confirmationNumber, receipt) => {
+            if (confirmationNumber === 0) {
+              console.log('✅ Transaction confirmed in block:', receipt.blockNumber);
+            }
+          })
+          .on('error', (error) => {
+            console.error('❌ Transaction error event:', error.message);
+          });
+        
+        // Add timeout to transaction (90 seconds for Sepolia)
+        const timeoutPromise = new Promise((_, reject) => {
+          const timeoutId = setTimeout(() => {
+            console.error('⏰ Transaction timeout after 90 seconds');
+            reject(new Error('Transaction timeout after 90 seconds - network may be congested'));
+          }, 120000);
+          
+          // Clear timeout if transaction completes
+          txPromise.then(() => clearTimeout(timeoutId)).catch(() => clearTimeout(timeoutId));
         });
         
-        // Add timeout to transaction
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Transaction timeout after 60 seconds')), 60000)
-        );
-        
+        console.log('⏳ Waiting for transaction to complete (timeout: 90s)...');
         const receipt = await Promise.race([txPromise, timeoutPromise]);
         
         const endTime = Date.now();
@@ -1092,8 +1133,7 @@ app.get('/api/debug/account-status', async (req, res) => {
     }
     
     privateKey = privateKey.trim();
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    
+const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());    
     // Test network connection
     const networkId = await web3.eth.net.getId();
     const blockNumber = await web3.eth.getBlockNumber();
@@ -1128,8 +1168,7 @@ app.get('/api/debug/contract-test', async (req, res) => {
     
     let privateKey = process.env.PRIVATE_KEY;
     privateKey = privateKey.trim();
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    
+const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());    
     // Test contract code exists
     const contractCode = await web3.eth.getCode(process.env.CONTRACT_ADDRESS);
     const isDeployed = contractCode !== '0x';
@@ -1219,8 +1258,7 @@ app.post('/api/debug/test-transaction', async (req, res) => {
     
     let privateKey = process.env.PRIVATE_KEY;
     privateKey = privateKey.trim();
-    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
-    
+const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());    
     // Create a test transaction
     const testHash = 'debug_test_' + Date.now();
     const tx = contract.methods.createRecord(testHash, 'debug_test', 'test_data', '0');
@@ -1248,7 +1286,7 @@ app.post('/api/debug/test-transaction', async (req, res) => {
     });
     
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Test transaction timeout')), 45000)
+      setTimeout(() => reject(new Error('Test transaction timeout')), 120000)
     );
     
     const receipt = await Promise.race([txPromise, timeoutPromise]);
@@ -1314,6 +1352,99 @@ app.get('/api/debug/recent-records', async (req, res) => {
     res.json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+// Add this simple test route to verify transaction execution:
+
+app.post('/api/debug/simple-tx-test', async (req, res) => {
+  console.log('=== SIMPLE TRANSACTION TEST STARTED ===');
+  
+  try {
+    if (!blockchainEnabled || !web3 || !contract) {
+      return res.json({ success: false, error: 'Blockchain not ready' });
+    }
+    
+    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY.trim());
+    const testHash = 'simple_test_' + Date.now();
+    
+    console.log('Test hash:', testHash);
+    console.log('Account:', account.address);
+    
+    // Get current gas price and enforce minimum
+    let gasPrice;
+    try {
+      const networkGasPrice = await web3.eth.getGasPrice();
+      gasPrice = Math.max(Number(networkGasPrice), 5000000000); // Minimum 5 gwei
+      gasPrice = Math.floor(gasPrice * 1.5); // 50% buffer
+    } catch {
+      gasPrice = 10000000000; // 10 gwei default
+    }
+    
+    console.log('Using gas price:', gasPrice, 'wei (', (gasPrice/1000000000).toFixed(2), 'gwei)');
+    
+    // Create transaction
+    const tx = contract.methods.createRecord(testHash, 'simple_test', 'test_data_' + Date.now(), '0');
+    
+    // Estimate gas
+    const gasEstimate = await tx.estimateGas({ from: account.address });
+    const gas = Math.floor(Number(gasEstimate) * 1.3);
+    
+    console.log('Gas estimate:', gas);
+    
+    // Send with detailed logging
+    console.log('Sending transaction NOW...');
+    
+    const startTime = Date.now();
+    let txHash = null;
+    
+    const receipt = await tx.send({
+      from: account.address,
+      gas: gas,
+      gasPrice: gasPrice.toString()
+    })
+    .on('transactionHash', (hash) => {
+      txHash = hash;
+      const elapsed = Date.now() - startTime;
+      console.log(`TX HASH RECEIVED (${elapsed}ms):`, hash);
+    })
+    .on('confirmation', (confirmationNumber, receipt) => {
+      if (confirmationNumber === 0) {
+        const elapsed = Date.now() - startTime;
+        console.log(`CONFIRMED (${elapsed}ms): Block ${receipt.blockNumber}`);
+      }
+    })
+    .on('error', (error) => {
+      console.log('TX ERROR EVENT:', error.message);
+    });
+    
+    const totalTime = Date.now() - startTime;
+    console.log('=== TRANSACTION SUCCESSFUL ===');
+    console.log('Total time:', totalTime, 'ms');
+    console.log('Final TX hash:', receipt.transactionHash);
+    console.log('Block number:', receipt.blockNumber);
+    
+    res.json({
+      success: true,
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+      totalTimeMs: totalTime,
+      testHash: testHash,
+      gasPrice: gasPrice,
+      gasPriceGwei: (gasPrice/1000000000).toFixed(2)
+    });
+    
+  } catch (error) {
+    console.error('=== SIMPLE TX TEST FAILED ===');
+    console.error('Error:', error.message);
+    console.error('Stack:', error.stack);
+    
+    res.json({
+      success: false,
+      error: error.message,
+      errorType: error.constructor.name
     });
   }
 });
