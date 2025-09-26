@@ -362,6 +362,8 @@ function getFormattedPrivateKey() {
 
 // Enhanced version with better error handling and BigInt safety:
 
+// Replace your createBlockchainRecord function with this version that has timeout handling:
+
 async function createBlockchainRecord(recordType, recordId, data) {
   const dataHash = generateHash(data);
   const lastRecord = await BlockchainRecord.findOne().sort({ blockNumber: -1 });
@@ -391,11 +393,13 @@ async function createBlockchainRecord(recordType, recordId, data) {
   await blockchainRecord.save();
   console.log('Local blockchain record saved:', recordHash);
   
-  // Background blockchain transaction
+  // Background blockchain transaction with timeout
   if (blockchainEnabled && web3 && contract) {
     setImmediate(async () => {
+      const startTime = Date.now();
+      
       try {
-        console.log('Attempting blockchain transaction...');
+        console.log('=== Starting blockchain transaction ===');
         
         // Validate private key
         let privateKey = process.env.PRIVATE_KEY;
@@ -404,13 +408,29 @@ async function createBlockchainRecord(recordType, recordId, data) {
         }
         
         privateKey = privateKey.trim();
-        
-        // Create account and add to wallet
-        const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
-        web3.eth.accounts.wallet.clear(); // Clear any existing accounts
-        web3.eth.accounts.wallet.add(account);
-        
+const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());        
         console.log('Using account:', account.address);
+        
+        // Check account balance first
+        try {
+          const balance = await Promise.race([
+            web3.eth.getBalance(account.address),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Balance check timeout')), 10000))
+          ]);
+          const balanceEth = web3.utils.fromWei(balance, 'ether');
+          console.log('Account balance:', balanceEth, 'ETH');
+          
+          if (parseFloat(balanceEth) < 0.001) {
+            throw new Error(`Insufficient balance: ${balanceEth} ETH. Need at least 0.001 ETH for gas.`);
+          }
+        } catch (balanceError) {
+          console.error('Balance check failed:', balanceError.message);
+          throw balanceError;
+        }
+        
+        // Clear wallet and add account
+        web3.eth.accounts.wallet.clear();
+        web3.eth.accounts.wallet.add(account);
         
         // Prepare contract method
         const tx = contract.methods.createRecord(
@@ -420,97 +440,124 @@ async function createBlockchainRecord(recordType, recordId, data) {
           previousHash
         );
         
+        // Get gas estimate with timeout
         console.log('Estimating gas...');
-        
-        // Handle BigInt values safely
-        let gasEstimate, gasPrice, gas, gasPriceStr;
-        
+        let gas;
         try {
-          // Get gas estimate
-          gasEstimate = await tx.estimateGas({ from: account.address });
-          console.log('Gas estimate (raw):', gasEstimate, typeof gasEstimate);
+          const gasEstimate = await Promise.race([
+            tx.estimateGas({ from: account.address }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Gas estimation timeout')), 15000))
+          ]);
           
-          // Convert BigInt to number safely
-          if (typeof gasEstimate === 'bigint') {
-            gas = Number(gasEstimate);
-          } else {
-            gas = parseInt(gasEstimate);
-          }
-          
-          // Add 20% buffer
-          gas = Math.floor(gas * 1.2);
+          gas = typeof gasEstimate === 'bigint' ? Number(gasEstimate) : parseInt(gasEstimate);
+          gas = Math.floor(gas * 1.3); // Add 30% buffer
+          console.log('Gas estimate:', gas);
           
         } catch (gasError) {
-          console.log('Gas estimation failed, using default:', gasError.message);
-          gas = 500000; // Default gas limit
+          console.log('Gas estimation failed:', gasError.message);
+          gas = 600000; // Higher default gas limit
+          console.log('Using default gas:', gas);
         }
         
+        // Get gas price with timeout
+        console.log('Getting gas price...');
+        let gasPriceStr;
         try {
-          // Get gas price
-          const gasPriceBigInt = await web3.eth.getGasPrice();
-          console.log('Gas price (raw):', gasPriceBigInt, typeof gasPriceBigInt);
+          const gasPriceBigInt = await Promise.race([
+            web3.eth.getGasPrice(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Gas price timeout')), 10000))
+          ]);
           
-          // Convert BigInt to string for transaction
-          if (typeof gasPriceBigInt === 'bigint') {
-            gasPriceStr = gasPriceBigInt.toString();
-            gasPrice = Number(gasPriceBigInt);
-          } else {
-            gasPriceStr = gasPriceBigInt.toString();
-            gasPrice = parseInt(gasPriceBigInt);
-          }
+          gasPriceStr = typeof gasPriceBigInt === 'bigint' ? gasPriceBigInt.toString() : gasPriceBigInt.toString();
+          console.log('Gas price:', gasPriceStr);
           
         } catch (priceError) {
-          console.log('Gas price fetch failed, using default:', priceError.message);
-          gasPriceStr = '20000000000'; // 20 gwei default
-          gasPrice = 20000000000;
+          console.log('Gas price fetch failed:', priceError.message);
+          gasPriceStr = '25000000000'; // 25 gwei default
+          console.log('Using default gas price:', gasPriceStr);
         }
         
-        console.log('Final transaction parameters:');
-        console.log('- Gas limit:', gas);
-        console.log('- Gas price:', gasPrice);
-        console.log('- Gas price (string):', gasPriceStr);
+        // Calculate total cost
+        const totalCostWei = BigInt(gas) * BigInt(gasPriceStr);
+        const totalCostEth = web3.utils.fromWei(totalCostWei, 'ether');
+        console.log('Estimated transaction cost:', totalCostEth, 'ETH');
         
-        // Send transaction
+        // Send transaction with timeout
         console.log('Sending transaction...');
-        const receipt = await tx.send({
+        console.log('Transaction parameters:');
+        console.log('- From:', account.address);
+        console.log('- Gas:', gas);
+        console.log('- Gas Price:', gasPriceStr);
+        console.log('- Contract:', process.env.CONTRACT_ADDRESS);
+        
+        const txPromise = tx.send({
           from: account.address,
           gas: gas,
           gasPrice: gasPriceStr
         });
         
-        console.log('Blockchain transaction successful!');
+        // Add timeout to transaction
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Transaction timeout after 60 seconds')), 60000)
+        );
+        
+        const receipt = await Promise.race([txPromise, timeoutPromise]);
+        
+        const endTime = Date.now();
+        const duration = (endTime - startTime) / 1000;
+        
+        console.log('=== Transaction successful! ===');
         console.log('Transaction hash:', receipt.transactionHash);
         console.log('Block number:', receipt.blockNumber);
-        console.log('Gas used:', receipt.gasUsed);
+        console.log('Gas used:', receipt.gasUsed?.toString());
+        console.log('Duration:', duration, 'seconds');
         
         // Update local record
         blockchainRecord.nonce = receipt.transactionHash;
         blockchainRecord.verified = true;
         await blockchainRecord.save();
         
-        console.log('Local record updated with transaction hash');
+        console.log('Local record updated successfully');
         
       } catch (error) {
-        console.error('=== Background blockchain transaction failed ===');
+        const endTime = Date.now();
+        const duration = (endTime - startTime) / 1000;
+        
+        console.error('=== Blockchain transaction failed ===');
+        console.error('Duration before failure:', duration, 'seconds');
         console.error('Error type:', error.constructor.name);
         console.error('Error message:', error.message);
         
-        // Log more details for debugging
-        if (error.message.includes('BigInt')) {
-          console.error('This is a BigInt conversion error');
+        // Specific error handling
+        if (error.message.includes('timeout')) {
+          console.error('TIMEOUT: Transaction took too long - network may be congested');
+        } else if (error.message.includes('insufficient funds') || error.message.includes('balance')) {
+          console.error('FUNDS: Account needs more ETH for gas fees');
         } else if (error.message.includes('gas')) {
-          console.error('This is a gas-related error');
-        } else if (error.message.includes('private key') || error.message.includes('account')) {
-          console.error('This is an account/private key error');
+          console.error('GAS: Gas estimation or execution failed');
+        } else if (error.message.includes('nonce')) {
+          console.error('NONCE: Transaction nonce issue - may need to wait for previous transactions');
+        } else if (error.message.includes('revert')) {
+          console.error('CONTRACT: Contract execution reverted - check contract state');
         } else if (error.message.includes('network') || error.message.includes('connection')) {
-          console.error('This is a network connectivity error');
+          console.error('NETWORK: Connection to Sepolia network failed');
         }
         
-        // Don't throw - operation should continue
+        // Log full error for debugging
+        console.error('Full error object:', error);
+        
+        // Update record with error status
+        try {
+          blockchainRecord.nonce = 'failed_' + Date.now();
+          blockchainRecord.verified = false;
+          await blockchainRecord.save();
+        } catch (saveError) {
+          console.error('Failed to update record with error status:', saveError);
+        }
       }
     });
   } else {
-    console.log('Blockchain not available - using local storage only');
+    console.log('Blockchain not available - local storage only');
   }
   
   return blockchainRecord;
@@ -904,7 +951,7 @@ app.get('/api/blockchain/test', async (req, res) => {
     }
     
     const blockNumber = await web3.eth.getBlockNumber();
-    const account = web3.eth.accounts.privateKeyToAccount(process.env.PRIVATE_KEY);
+    const account = web3.eth.accounts.privateKeyToAccount(getFormattedPrivateKey());
     const balance = await web3.eth.getBalance(account.address);
     
     res.json({
@@ -1026,6 +1073,247 @@ app.post('/api/debug/init-blockchain', async (req, res) => {
       success: false,
       error: error.message,
       message: 'Blockchain initialization failed'
+    });
+  }
+});
+
+// Add these debug routes to your Express app to help diagnose the issue:
+
+// Test account balance and connection
+app.get('/api/debug/account-status', async (req, res) => {
+  try {
+    if (!blockchainEnabled || !web3) {
+      return res.json({ success: false, error: 'Blockchain not initialized' });
+    }
+    
+    let privateKey = process.env.PRIVATE_KEY;
+    if (!privateKey) {
+      return res.json({ success: false, error: 'Private key not available' });
+    }
+    
+    privateKey = privateKey.trim();
+    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+    
+    // Test network connection
+    const networkId = await web3.eth.net.getId();
+    const blockNumber = await web3.eth.getBlockNumber();
+    const balance = await web3.eth.getBalance(account.address);
+    const gasPrice = await web3.eth.getGasPrice();
+    
+    res.json({
+      success: true,
+      account: account.address,
+      networkId: networkId.toString(),
+      latestBlock: blockNumber.toString(),
+      balance: web3.utils.fromWei(balance, 'ether') + ' ETH',
+      gasPrice: gasPrice.toString() + ' wei',
+      gasPriceGwei: web3.utils.fromWei(gasPrice, 'gwei') + ' gwei'
+    });
+    
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      details: error.toString()
+    });
+  }
+});
+
+// Test contract interaction
+app.get('/api/debug/contract-test', async (req, res) => {
+  try {
+    if (!blockchainEnabled || !web3 || !contract) {
+      return res.json({ success: false, error: 'Blockchain/contract not initialized' });
+    }
+    
+    let privateKey = process.env.PRIVATE_KEY;
+    privateKey = privateKey.trim();
+    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+    
+    // Test contract code exists
+    const contractCode = await web3.eth.getCode(process.env.CONTRACT_ADDRESS);
+    const isDeployed = contractCode !== '0x';
+    
+    if (!isDeployed) {
+      return res.json({
+        success: false,
+        error: 'Contract not deployed',
+        contractAddress: process.env.CONTRACT_ADDRESS,
+        contractCodeLength: contractCode.length
+      });
+    }
+    
+    // Test gas estimation for a dummy transaction
+    const testHash = 'test_' + Date.now();
+    const tx = contract.methods.createRecord(testHash, 'test', 'testData', '0');
+    
+    let gasEstimate;
+    try {
+      gasEstimate = await tx.estimateGas({ from: account.address });
+    } catch (gasError) {
+      return res.json({
+        success: false,
+        error: 'Gas estimation failed',
+        gasError: gasError.message,
+        contractAddress: process.env.CONTRACT_ADDRESS,
+        account: account.address
+      });
+    }
+    
+    res.json({
+      success: true,
+      contractAddress: process.env.CONTRACT_ADDRESS,
+      contractDeployed: true,
+      contractCodeLength: contractCode.length,
+      account: account.address,
+      gasEstimate: gasEstimate.toString(),
+      message: 'Contract interaction test successful'
+    });
+    
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      details: error.toString()
+    });
+  }
+});
+
+// Test a simple contract read operation
+app.get('/api/debug/contract-read-test', async (req, res) => {
+  try {
+    if (!blockchainEnabled || !web3 || !contract) {
+      return res.json({ success: false, error: 'Blockchain/contract not initialized' });
+    }
+    
+    // Try to read from contract (verifyRecord with a dummy hash)
+    const dummyHash = 'nonexistent_hash_test';
+    const result = await contract.methods.verifyRecord(dummyHash).call();
+    
+    res.json({
+      success: true,
+      message: 'Contract read test successful',
+      contractAddress: process.env.CONTRACT_ADDRESS,
+      testResult: {
+        exists: result[0],
+        recordData: result[1]
+      }
+    });
+    
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message,
+      contractAddress: process.env.CONTRACT_ADDRESS,
+      message: 'Contract read test failed'
+    });
+  }
+});
+
+// Force a test transaction
+app.post('/api/debug/test-transaction', async (req, res) => {
+  try {
+    if (!blockchainEnabled || !web3 || !contract) {
+      return res.json({ success: false, error: 'Blockchain/contract not initialized' });
+    }
+    
+    let privateKey = process.env.PRIVATE_KEY;
+    privateKey = privateKey.trim();
+    const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+    
+    // Create a test transaction
+    const testHash = 'debug_test_' + Date.now();
+    const tx = contract.methods.createRecord(testHash, 'debug_test', 'test_data', '0');
+    
+    console.log('=== DEBUG: Starting test transaction ===');
+    console.log('Test hash:', testHash);
+    console.log('Account:', account.address);
+    
+    // Get gas estimate
+    const gasEstimate = await tx.estimateGas({ from: account.address });
+    const gas = Math.floor(Number(gasEstimate) * 1.3);
+    
+    // Get gas price
+    const gasPriceBigInt = await web3.eth.getGasPrice();
+    const gasPriceStr = gasPriceBigInt.toString();
+    
+    console.log('Gas:', gas);
+    console.log('Gas Price:', gasPriceStr);
+    
+    // Send transaction with timeout
+    const txPromise = tx.send({
+      from: account.address,
+      gas: gas,
+      gasPrice: gasPriceStr
+    });
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Test transaction timeout')), 45000)
+    );
+    
+    const receipt = await Promise.race([txPromise, timeoutPromise]);
+    
+    console.log('=== DEBUG: Test transaction successful ===');
+    console.log('TX Hash:', receipt.transactionHash);
+    console.log('Block:', receipt.blockNumber);
+    
+    res.json({
+      success: true,
+      message: 'Test transaction successful',
+      transactionHash: receipt.transactionHash,
+      blockNumber: receipt.blockNumber.toString(),
+      gasUsed: receipt.gasUsed.toString(),
+      testHash: testHash
+    });
+    
+  } catch (error) {
+    console.error('=== DEBUG: Test transaction failed ===');
+    console.error('Error:', error.message);
+    
+    res.json({
+      success: false,
+      error: error.message,
+      message: 'Test transaction failed - check server logs for details'
+    });
+  }
+});
+
+// Get recent blockchain records with their verification status
+app.get('/api/debug/recent-records', async (req, res) => {
+  try {
+    const records = await BlockchainRecord.find({})
+      .sort({ timestamp: -1 })
+      .limit(10);
+    
+    const recordsWithStatus = records.map(record => ({
+      _id: record._id,
+      recordType: record.recordType,
+      dataHash: record.dataHash,
+      blockNumber: record.blockNumber,
+      timestamp: record.timestamp,
+      nonce: record.nonce,
+      verified: record.verified,
+      isLocal: record.nonce.startsWith('local_'),
+      isFailed: record.nonce.startsWith('failed_'),
+      hasTransactionHash: record.nonce.length === 66 && record.nonce.startsWith('0x')
+    }));
+    
+    res.json({
+      success: true,
+      records: recordsWithStatus,
+      summary: {
+        total: recordsWithStatus.length,
+        verified: recordsWithStatus.filter(r => r.verified).length,
+        local: recordsWithStatus.filter(r => r.isLocal).length,
+        failed: recordsWithStatus.filter(r => r.isFailed).length,
+        onChain: recordsWithStatus.filter(r => r.hasTransactionHash).length
+      }
+    });
+    
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message
     });
   }
 });
