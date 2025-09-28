@@ -1817,17 +1817,32 @@ app.get('/api/submissions/download/:submissionId', async (req, res) => {
     const { submissionId } = req.params;
     const submission = await Submission.findById(submissionId);
     
-    if (!submission || !fs.existsSync(submission.filePath)) {
-      return res.status(404).json({ success: false, error: 'File not found' });
+    if (!submission) {
+      return res.status(404).json({ success: false, error: 'Submission not found' });
     }
     
-    res.setHeader('Content-Disposition', `attachment; filename="${submission.originalName}"`);
+    if (!submission.filePath || !fs.existsSync(submission.filePath)) {
+      return res.status(404).json({ success: false, error: 'File not found on server' });
+    }
+    
+    // Set proper headers
+    const fileName = submission.originalName || submission.fileName || `submission_${submissionId}`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.sendFile(path.resolve(submission.filePath));
+    
+    // Send file
+    res.sendFile(path.resolve(submission.filePath), (err) => {
+      if (err) {
+        console.error('File send error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, error: 'Failed to send file' });
+        }
+      }
+    });
     
   } catch (error) {
     console.error('Download error:', error);
-    res.status(500).json({ success: false, error: 'Failed to download file' });
+    res.status(500).json({ success: false, error: 'Failed to download file: ' + error.message });
   }
 });
 

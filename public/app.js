@@ -1479,27 +1479,27 @@ function showBlockchainSection() {
                 </form>
             </div>
             
-            <div class="blockchain-stats">
-                <h4>Blockchain Statistics</h4>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <span class="stat-value">${blockchainRecords.length}</span>
-                        <span class="stat-label">Total Records</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value">${blockchainRecords.filter(r => r.type === 'assignment_template').length}</span>
-                        <span class="stat-label">Assignment Templates</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value">${blockchainRecords.filter(r => r.type === 'submission').length}</span>
-                        <span class="stat-label">Submissions</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value">${blockchainRecords.filter(r => r.type === 'grading').length}</span>
-                        <span class="stat-label">Gradings</span>
-                    </div>
-                </div>
-            </div>
+           <div class="blockchain-stats">
+    <h4>Blockchain Statistics</h4>
+    <div class="stats-grid">
+        <div class="stat-item">
+            <span class="stat-value">${blockchainRecords.length}</span>
+            <span class="stat-label">Total Records</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-value">${blockchainRecords.filter(r => r.recordType === 'assignment_template').length}</span>
+            <span class="stat-label">Assignment Templates</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-value">${blockchainRecords.filter(r => r.recordType === 'submission').length}</span>
+            <span class="stat-label">Submissions</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-value">${blockchainRecords.filter(r => r.recordType === 'grade').length}</span>
+            <span class="stat-label">Gradings</span>
+        </div>
+    </div>
+</div>
         </div>
         
         <div class="blockchain-records">
@@ -1630,19 +1630,31 @@ async function downloadSubmission(submissionId) {
     try {
         const response = await fetch(`/api/submissions/download/${submissionId}`);
         if (response.ok) {
+            // Get filename from response headers or use default
+            const contentDisposition = response.headers.get('content-disposition');
+            let filename = `submission_${submissionId}`;
+            
+            if (contentDisposition && contentDisposition.includes('filename=')) {
+                filename = contentDisposition.split('filename=')[1].replace(/"/g, '');
+            }
+            
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `submission_${submissionId}.pdf`;
+            a.download = filename;
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
+            showMessage('File downloaded successfully!', 'success');
         } else {
-            showMessage('File download failed', 'error');
+            const errorData = await response.json();
+            showMessage('Download failed: ' + errorData.error, 'error');
         }
     } catch (error) {
         console.error('Download error:', error);
-        showMessage('Download functionality not available in demo mode', 'info');
+        showMessage('Download failed: ' + error.message, 'error');
     }
 }
 
