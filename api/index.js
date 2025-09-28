@@ -800,6 +800,189 @@ app.put('/api/auth/change-password', async (req, res) => {
   }
 });
 
+// Create new user (admin only)
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, email, password, name, role } = req.body;
+    
+    // Validation
+    if (!username || !email || !password || !name || !role) {
+      return res.status(400).json({ success: false, error: 'All fields are required' });
+    }
+
+    if (!['student', 'lecturer', 'admin'].includes(role)) {
+      return res.status(400).json({ success: false, error: 'Invalid role specified' });
+    }
+
+    // Check for existing user
+    const existingUser = await User.findOne({
+      $or: [
+        { username: username.trim() },
+        { email: email.trim() }
+      ]
+    });
+
+    if (existingUser) {
+      const field = existingUser.username === username.trim() ? 'Username' : 'Email';
+      return res.status(409).json({ success: false, error: `${field} already exists` });
+    }
+
+    // Create new user
+    const newUser = new User({
+      username: username.trim(),
+      email: email.trim(),
+      password: password,
+      name: name.trim(),
+      role: role
+    });
+
+    await newUser.save();
+
+    // Log activity
+    try {
+      await logActivity(null, 'Admin', 'User Created', `Created new user: ${name} (${username})`, 'user', newUser._id, req.ip, {
+        newUserRole: role,
+        newUserEmail: email
+      });
+    } catch (logError) {
+      console.error('Activity logging failed:', logError);
+    }
+
+    // Return user data (without password)
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      user: {
+        id: newUser._id.toString(),
+        username: newUser.username,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        isActive: newUser.isActive,
+        createdAt: newUser.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('User creation error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create user: ' + error.message });
+  }
+});
+
+// Update user (admin only)
+app.put('/api/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { username, email, name, role } = req.body;
+    
+    // Validation
+    if (!username || !email || !name || !role) {
+      return res.status(400).json({ success: false, error: 'All fields are required' });
+    }
+
+    if (!['student', 'lecturer', 'admin'].includes(role)) {
+      return res.status(400).json({ success: false, error: 'Invalid role specified' });
+    }
+
+    // Find user to update
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Check for username/email conflicts (excluding current user)
+    const existingUser = await User.findOne({
+      _id: { $ne: userId },
+      $or: [
+        { username: username.trim() },
+        { email: email.trim() }
+      ]
+    });
+
+    if (existingUser) {
+      const field = existingUser.username === username.trim() ? 'Username' : 'Email';
+      return res.status(409).json({ success: false, error: `${field} already exists` });
+    }
+
+    // Update user
+    user.username = username.trim();
+    user.email = email.trim();
+    user.name = name.trim();
+    user.role = role;
+
+    await user.save();
+
+    // Log activity
+    try {
+      await logActivity(null, 'Admin', 'User Updated', `Updated user: ${name} (${username})`, 'user', user._id, req.ip, {
+        updatedUserRole: role
+      });
+    } catch (logError) {
+      console.error('Activity logging failed:', logError);
+    }
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('User update error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update user: ' + error.message });
+  }
+});
+
+// Delete user (admin only)
+app.delete('/api/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Find user to delete
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Prevent deleting the last admin
+    if (user.role === 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(403).json({ success: false, error: 'Cannot delete the last administrator' });
+      }
+    }
+
+    // Delete user
+    await User.findByIdAndDelete(userId);
+
+    // Log activity
+    try {
+      await logActivity(null, 'Admin', 'User Deleted', `Deleted user: ${user.name} (${user.username})`, 'user', userId, req.ip, {
+        deletedUserRole: user.role
+      });
+    } catch (logError) {
+      console.error('Activity logging failed:', logError);
+    }
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('User deletion error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete user: ' + error.message });
+  }
+});
+
 // Assignment Template Routes (Lecturer Only)
 app.post('/api/assignments/template', async (req, res) => {
   try {

@@ -1893,21 +1893,10 @@ async function addNewUser(event) {
         } else {
             showMessage('Error creating user: ' + result.error, 'error');
         }
-    } catch (error) {
-        console.error('User creation error:', error);
-        
-        // Fallback for demo mode
-        const newUser = {
-            id: users.length + 1,
-            ...userData,
-            createdAt: new Date().toISOString()
-        };
-        users.push(newUser);
-        
-        closeModal();
-        showMessage('User created successfully! (Demo mode)', 'success');
-        showDashboardSection('users');
-    }
+   } catch (error) {
+    console.error('User creation error:', error);
+    showMessage('Failed to create user: ' + error.message, 'error');
+}
 }
 
 function editUser(userId) {
@@ -1991,19 +1980,10 @@ async function updateUser(event, userId) {
         } else {
             showMessage('Error updating user: ' + result.error, 'error');
         }
-    } catch (error) {
-        console.error('User update error:', error);
-        
-        // Fallback for demo mode
-        const userIndex = users.findIndex(u => u.id == userId);
-        if (userIndex !== -1) {
-            users[userIndex] = { ...users[userIndex], ...userData };
-        }
-        
-        closeModal();
-        showMessage('User updated successfully! (Demo mode)', 'success');
-        showDashboardSection('users');
-    }
+   } catch (error) {
+    console.error('User update error:', error);
+    showMessage('Failed to update user: ' + error.message, 'error');
+}
 }
 
 async function deleteUser(userId) {
@@ -2025,14 +2005,10 @@ async function deleteUser(userId) {
         } else {
             showMessage('Error deleting user: ' + result.error, 'error');
         }
-    } catch (error) {
-        console.error('User deletion error:', error);
-        
-        // Fallback for demo mode
-        users = users.filter(u => u.id != userId);
-        showMessage('User deleted successfully! (Demo mode)', 'success');
-        showDashboardSection('users');
-    }
+   } catch (error) {
+    console.error('User deletion error:', error);
+    showMessage('Failed to delete user: ' + error.message, 'error');
+} 
 }
 
 // Additional Utility Functions
